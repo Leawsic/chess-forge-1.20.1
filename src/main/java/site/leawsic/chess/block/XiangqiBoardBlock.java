@@ -26,7 +26,7 @@ public class XiangqiBoardBlock extends HorizontalDirectionalBlock implements Ent
     @Override public BlockEntity newBlockEntity(BlockPos pos, BlockState state) { return new XiangqiBoardBlockEntity(pos, state); }
     @Override public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
         if (!(level.getBlockEntity(pos) instanceof XiangqiBoardBlockEntity board)) return InteractionResult.PASS;
-        if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) { if (board.getHostPlayer() == null) board.setHost(player.getUUID()); NetworkHooks.openScreen(serverPlayer, board, pos); }
+        if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) { if (board.getHostPlayer() == null) board.setHost(player.getUUID()); else if (!board.isMultiplayer() && !board.isInGame(player.getUUID()) && serverPlayer.getServer().getPlayerList().getPlayer(board.getHostPlayer()) == null) board.replaceHost(player.getUUID()); NetworkHooks.openScreen(serverPlayer, board, pos); }
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
     @Override public void onRemove(BlockState state, Level level, BlockPos pos, BlockState next, boolean isMoving) { if (state.getBlock() != next.getBlock()) BoardMultiblock.remove(level, pos, state.getValue(FACING)); super.onRemove(state, level, pos, next, isMoving); }

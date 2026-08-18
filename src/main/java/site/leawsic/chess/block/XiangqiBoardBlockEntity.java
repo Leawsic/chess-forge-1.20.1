@@ -66,6 +66,7 @@ public class XiangqiBoardBlockEntity extends BlockEntity implements MenuProvider
     public int getPlayerPieceType(UUID player) { return isHost(player) ? hostPieceType : guestPlayer != null && guestPlayer.equals(player) ? guestPieceType : 0; }
 
     public void setHost(UUID player) { if (hostPlayer == null) { clearSession(); hostPlayer = player; sync(); } }
+    public void replaceHost(UUID player) { hostPlayer = player; guestPlayer = null; multiplayer = false; hostPieceType = XiangqiConfig.RED; guestPieceType = XiangqiConfig.BLACK; aiEnabled = false; aiPlayerPieceType = XiangqiConfig.RED; resetBoard(hostPieceType); sync(); }
     public boolean joinGame(UUID player) {
         if (isInGame(player)) return true;
         if (hostPlayer == null) { setHost(player); return true; }
@@ -81,7 +82,7 @@ public class XiangqiBoardBlockEntity extends BlockEntity implements MenuProvider
         sync(); return true;
     }
     public boolean setPieceTypes(int hostType, int guestType, UUID player) {
-        if (!isHost(player) || hostType == guestType || !isColor(hostType) || !isColor(guestType)) return false;
+        if (!isHost(player) || isGameStarted() || hostType == guestType || !isColor(hostType) || !isColor(guestType)) return false;
         hostPieceType = hostType; guestPieceType = guestType; resetBoard(isGameStarted() ? XiangqiConfig.RED : hostPieceType); sync(); return true;
     }
     public boolean toggleAi(UUID player) {
@@ -133,7 +134,7 @@ public class XiangqiBoardBlockEntity extends BlockEntity implements MenuProvider
     private void cancelAiMove() { aiGeneration++; aiThinking = false; }
     private void sync() { setChanged(); if (level != null) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3); }
 
-    @Override public Component getDisplayName() { return Component.translatable("block.chess.xiangqi_board"); }
+    @Override public Component getDisplayName() { return Component.translatable("block.chess.xq_board"); }
     @Override public AbstractContainerMenu createMenu(int id, Inventory inventory, Player player) { return new XiangqiMenu(id, inventory, this); }
     @Override protected void saveAdditional(CompoundTag tag) { super.saveAdditional(tag); tag.putIntArray("Board", flatten()); tag.putInt("CurrentPlayer", currentPlayer); tag.putBoolean("GameOver", gameOver); tag.putInt("Winner", winner); if (hostPlayer != null) tag.putUUID("HostPlayer", hostPlayer); if (guestPlayer != null) tag.putUUID("GuestPlayer", guestPlayer); tag.putBoolean("Multiplayer", multiplayer); tag.putInt("HostPieceType", hostPieceType); tag.putInt("GuestPieceType", guestPieceType); tag.putBoolean("AiEnabled", aiEnabled); tag.putInt("AiPlayerPieceType", aiPlayerPieceType); tag.putBoolean("HasMoved", hasMoved); tag.putInt("LastFromX", lastFromX); tag.putInt("LastFromY", lastFromY); tag.putInt("LastToX", lastToX); tag.putInt("LastToY", lastToY); }
     @Override public void load(CompoundTag tag) { super.load(tag); board = new int[XiangqiConfig.ROWS][XiangqiConfig.COLS]; int[] values = tag.getIntArray("Board"); for (int i = 0; i < values.length && i < XiangqiConfig.ROWS * XiangqiConfig.COLS; i++) board[i / XiangqiConfig.COLS][i % XiangqiConfig.COLS] = values[i]; currentPlayer = tag.contains("CurrentPlayer") ? tag.getInt("CurrentPlayer") : XiangqiConfig.RED; gameOver = tag.getBoolean("GameOver"); winner = tag.getInt("Winner"); hostPlayer = tag.hasUUID("HostPlayer") ? tag.getUUID("HostPlayer") : null; guestPlayer = tag.hasUUID("GuestPlayer") ? tag.getUUID("GuestPlayer") : null; multiplayer = tag.getBoolean("Multiplayer"); hostPieceType = tag.contains("HostPieceType") ? tag.getInt("HostPieceType") : XiangqiConfig.RED; guestPieceType = tag.contains("GuestPieceType") ? tag.getInt("GuestPieceType") : XiangqiConfig.BLACK; aiEnabled = tag.getBoolean("AiEnabled"); aiPlayerPieceType = tag.contains("AiPlayerPieceType") ? tag.getInt("AiPlayerPieceType") : XiangqiConfig.RED; hasMoved = tag.getBoolean("HasMoved"); lastFromX = tag.contains("LastFromX") ? tag.getInt("LastFromX") : -1; lastFromY = tag.contains("LastFromY") ? tag.getInt("LastFromY") : -1; lastToX = tag.contains("LastToX") ? tag.getInt("LastToX") : -1; lastToY = tag.contains("LastToY") ? tag.getInt("LastToY") : -1; }
