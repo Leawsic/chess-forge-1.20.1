@@ -17,8 +17,8 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 public class BoardPlaceholderBlock extends HorizontalDirectionalBlock {
-    public static final net.minecraft.world.level.block.state.properties.IntegerProperty OFFSET_X = net.minecraft.world.level.block.state.properties.IntegerProperty.create("offset_x", -1, 1);
-    public static final net.minecraft.world.level.block.state.properties.IntegerProperty OFFSET_Z = net.minecraft.world.level.block.state.properties.IntegerProperty.create("offset_z", -1, 1);
+    public static final net.minecraft.world.level.block.state.properties.IntegerProperty OFFSET_X = net.minecraft.world.level.block.state.properties.IntegerProperty.create("offset_x", 0, 2);
+    public static final net.minecraft.world.level.block.state.properties.IntegerProperty OFFSET_Z = net.minecraft.world.level.block.state.properties.IntegerProperty.create("offset_z", 0, 2);
 
     public BoardPlaceholderBlock() {
         super(BlockBehaviour.Properties.of().mapColor(MapColor.NONE).strength(2.5f).noLootTable().noOcclusion());

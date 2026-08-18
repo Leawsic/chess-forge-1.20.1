@@ -23,8 +23,8 @@ public final class BoardMultiblock {
             BlockPos pos = offset(origin, facing, x, z);
             level.setBlock(pos, Chess.PLACEHOLDER.get().defaultBlockState()
                     .setValue(BoardPlaceholderBlock.FACING, facing)
-                    .setValue(BoardPlaceholderBlock.OFFSET_X, x)
-                    .setValue(BoardPlaceholderBlock.OFFSET_Z, z), 3);
+                    .setValue(BoardPlaceholderBlock.OFFSET_X, x + 1)
+                    .setValue(BoardPlaceholderBlock.OFFSET_Z, z + 1), 3);
         }
         return true;
     }
@@ -43,6 +43,7 @@ public final class BoardMultiblock {
 
     public static BlockPos origin(BlockPos placeholder, BlockState state) {
         return offset(placeholder, state.getValue(BoardPlaceholderBlock.FACING),
-                -state.getValue(BoardPlaceholderBlock.OFFSET_X), -state.getValue(BoardPlaceholderBlock.OFFSET_Z));
+                1 - state.getValue(BoardPlaceholderBlock.OFFSET_X),
+                1 - state.getValue(BoardPlaceholderBlock.OFFSET_Z));
     }
 }
