@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=east": {
+      "model": "chess:block/xq_board_thin",
+      "y": 90
+    },
+    "facing=north": {
+      "model": "chess:block/xq_board_thin"
+    },
+    "facing=south": {
+      "model": "chess:block/xq_board_thin",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "chess:block/xq_board_thin",
+      "y": 270
+    }
+  }
+}

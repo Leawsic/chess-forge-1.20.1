@@ -3,13 +3,11 @@ package site.leawsic.chess.network;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.function.Consumer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.client.Minecraft;
 import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
@@ -22,7 +20,10 @@ public final class ChessNetwork {
     private static final String PROTOCOL = "1";
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(Chess.id("main"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
     private static int id;
+    private static Consumer<String> clientNoticeHandler = key -> {};
     private ChessNetwork() {}
+
+    public static void setClientNoticeHandler(Consumer<String> handler) { clientNoticeHandler = handler == null ? key -> {} : handler; }
 
     public static void init() {
         register(PlacePiecePacket.class, PlacePiecePacket::encode, PlacePiecePacket::decode, PlacePiecePacket::handle);
@@ -59,5 +60,5 @@ public final class ChessNetwork {
     public record ToggleAiPacket(BlockPos pos) { static void encode(ToggleAiPacket p, FriendlyByteBuf b) { b.writeBlockPos(p.pos); } static ToggleAiPacket decode(FriendlyByteBuf b) { return new ToggleAiPacket(b.readBlockPos()); } static void handle(ToggleAiPacket p, Supplier<NetworkEvent.Context> c) { server(c, player -> { if (player.level().getBlockEntity(p.pos) instanceof BaseBoardBlockEntity board) board.toggleAi(player.getUUID()); else if (player.level().getBlockEntity(p.pos) instanceof XiangqiBoardBlockEntity board) board.toggleAi(player.getUUID()); }); } }
     public record XiangqiMovePacket(BlockPos pos, int fromX, int fromY, int toX, int toY) { static void encode(XiangqiMovePacket p, FriendlyByteBuf b) { b.writeBlockPos(p.pos); b.writeVarInt(p.fromX); b.writeVarInt(p.fromY); b.writeVarInt(p.toX); b.writeVarInt(p.toY); } static XiangqiMovePacket decode(FriendlyByteBuf b) { return new XiangqiMovePacket(b.readBlockPos(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt()); } static void handle(XiangqiMovePacket p, Supplier<NetworkEvent.Context> c) { server(c, player -> { if (player.level().getBlockEntity(p.pos) instanceof XiangqiBoardBlockEntity board) { String error = board.tryMove(p.fromX, p.fromY, p.toX, p.toY, player.getUUID()); if (error != null) notice(player, error); } }); } }
     public record XiangqiResetPacket(BlockPos pos) { static void encode(XiangqiResetPacket p, FriendlyByteBuf b) { b.writeBlockPos(p.pos); } static XiangqiResetPacket decode(FriendlyByteBuf b) { return new XiangqiResetPacket(b.readBlockPos()); } static void handle(XiangqiResetPacket p, Supplier<NetworkEvent.Context> c) { server(c, player -> { if (player.level().getBlockEntity(p.pos) instanceof XiangqiBoardBlockEntity board) board.resetBoard(player.getUUID()); }); } }
-    public record GuiNoticePacket(String translationKey) { static void encode(GuiNoticePacket p, FriendlyByteBuf b) { b.writeUtf(p.translationKey, 256); } static GuiNoticePacket decode(FriendlyByteBuf b) { return new GuiNoticePacket(b.readUtf(256)); } static void handle(GuiNoticePacket p, Supplier<NetworkEvent.Context> c) { NetworkEvent.Context context = c.get(); context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> { if (Minecraft.getInstance().player != null) Minecraft.getInstance().player.displayClientMessage(Component.translatable(p.translationKey), true); })); context.setPacketHandled(true); } }
+    public record GuiNoticePacket(String translationKey) { static void encode(GuiNoticePacket p, FriendlyByteBuf b) { b.writeUtf(p.translationKey, 256); } static GuiNoticePacket decode(FriendlyByteBuf b) { return new GuiNoticePacket(b.readUtf(256)); } static void handle(GuiNoticePacket p, Supplier<NetworkEvent.Context> c) { NetworkEvent.Context context = c.get(); context.enqueueWork(() -> clientNoticeHandler.accept(p.translationKey)); context.setPacketHandled(true); } }
 }

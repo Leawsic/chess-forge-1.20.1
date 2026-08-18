@@ -55,9 +55,9 @@ public class BaseBoardBlock extends HorizontalDirectionalBlock implements Entity
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
 
-    @Override public void onRemove(BlockState state, Level level, BlockPos pos, BlockState next) {
+    @Override public void onRemove(BlockState state, Level level, BlockPos pos, BlockState next, boolean isMoving) {
         if (state.getBlock() != next.getBlock()) BoardMultiblock.remove(level, pos, state.getValue(FACING));
-        super.onRemove(state, level, pos, next);
+        super.onRemove(state, level, pos, next, isMoving);
     }
 
     @Override public RenderShape getRenderShape(BlockState state) { return RenderShape.MODEL; }

@@ -29,7 +29,7 @@ public class XiangqiBoardBlock extends HorizontalDirectionalBlock implements Ent
         if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) { if (board.getHostPlayer() == null) board.setHost(player.getUUID()); NetworkHooks.openScreen(serverPlayer, board, pos); }
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
-    @Override public void onRemove(BlockState state, Level level, BlockPos pos, BlockState next) { if (state.getBlock() != next.getBlock()) BoardMultiblock.remove(level, pos, state.getValue(FACING)); super.onRemove(state, level, pos, next); }
+    @Override public void onRemove(BlockState state, Level level, BlockPos pos, BlockState next, boolean isMoving) { if (state.getBlock() != next.getBlock()) BoardMultiblock.remove(level, pos, state.getValue(FACING)); super.onRemove(state, level, pos, next, isMoving); }
     @Override public RenderShape getRenderShape(BlockState state) { return RenderShape.MODEL; }
     @Override public VoxelShape getShape(BlockState state, net.minecraft.world.level.BlockGetter level, BlockPos pos, net.minecraft.world.phys.shapes.CollisionContext context) { return Block.box(-16, 0, -16, 32, 1, 32); }
     @Override public VoxelShape getCollisionShape(BlockState state, net.minecraft.world.level.BlockGetter level, BlockPos pos, net.minecraft.world.phys.shapes.CollisionContext context) { return Block.box(-16, 0, -16, 32, 1, 32); }

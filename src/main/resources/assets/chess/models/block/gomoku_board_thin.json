@@ -1,0 +1,78 @@
+{
+  "elements": [
+    {
+      "faces": {
+        "down": {
+          "texture": "#bottom",
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ]
+        },
+        "east": {
+          "texture": "#side",
+          "uv": [
+            0,
+            15,
+            16,
+            16
+          ]
+        },
+        "north": {
+          "texture": "#side",
+          "uv": [
+            0,
+            15,
+            16,
+            16
+          ]
+        },
+        "south": {
+          "texture": "#side",
+          "uv": [
+            0,
+            15,
+            16,
+            16
+          ]
+        },
+        "up": {
+          "texture": "#top",
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ]
+        },
+        "west": {
+          "texture": "#side",
+          "uv": [
+            0,
+            15,
+            16,
+            16
+          ]
+        }
+      },
+      "from": [
+        -16.0,
+        0.0,
+        -16.0
+      ],
+      "to": [
+        32.0,
+        1.0,
+        32.0
+      ]
+    }
+  ],
+  "textures": {
+    "bottom": "chess:block/go_board_bottom",
+    "particle": "chess:block/gomoku_board_top",
+    "side": "minecraft:block/birch_planks",
+    "top": "chess:block/gomoku_board_top"
+  }
+}

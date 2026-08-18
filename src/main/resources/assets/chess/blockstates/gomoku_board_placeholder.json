@@ -1,0 +1,112 @@
+{
+  "variants": {
+    "facing=east,offset_x=0,offset_z=0": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=east,offset_x=0,offset_z=1": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=east,offset_x=0,offset_z=2": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=east,offset_x=1,offset_z=0": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=east,offset_x=1,offset_z=1": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=east,offset_x=1,offset_z=2": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=east,offset_x=2,offset_z=0": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=east,offset_x=2,offset_z=1": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=east,offset_x=2,offset_z=2": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=north,offset_x=0,offset_z=0": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=north,offset_x=0,offset_z=1": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=north,offset_x=0,offset_z=2": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=north,offset_x=1,offset_z=0": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=north,offset_x=1,offset_z=1": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=north,offset_x=1,offset_z=2": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=north,offset_x=2,offset_z=0": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=north,offset_x=2,offset_z=1": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=north,offset_x=2,offset_z=2": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=south,offset_x=0,offset_z=0": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=south,offset_x=0,offset_z=1": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=south,offset_x=0,offset_z=2": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=south,offset_x=1,offset_z=0": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=south,offset_x=1,offset_z=1": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=south,offset_x=1,offset_z=2": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=south,offset_x=2,offset_z=0": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=south,offset_x=2,offset_z=1": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=south,offset_x=2,offset_z=2": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=west,offset_x=0,offset_z=0": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=west,offset_x=0,offset_z=1": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=west,offset_x=0,offset_z=2": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=west,offset_x=1,offset_z=0": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=west,offset_x=1,offset_z=1": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=west,offset_x=1,offset_z=2": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=west,offset_x=2,offset_z=0": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=west,offset_x=2,offset_z=1": {
+      "model": "chess:block/gomoku_board_placeholder"
+    },
+    "facing=west,offset_x=2,offset_z=2": {
+      "model": "chess:block/gomoku_board_placeholder"
+    }
+  }
+}

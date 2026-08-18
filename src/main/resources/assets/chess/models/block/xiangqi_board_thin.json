@@ -1,0 +1,19 @@
+{
+  "elements": [
+    {
+      "from": [-16, 0, -16], "to": [32, 1, 32],
+      "faces": {
+        "down": { "texture": "#bottom" },
+        "up": { "texture": "#top" },
+        "north": { "texture": "#side" }, "south": { "texture": "#side" },
+        "east": { "texture": "#side" }, "west": { "texture": "#side" }
+      }
+    }
+  ],
+  "textures": {
+    "bottom": "chess:block/go_board_bottom",
+    "particle": "chess:block/xq_board_top",
+    "side": "minecraft:block/birch_planks",
+    "top": "chess:block/xq_board_top"
+  }
+}
