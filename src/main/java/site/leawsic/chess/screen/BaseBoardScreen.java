@@ -219,7 +219,7 @@ public class BaseBoardScreen extends AbstractContainerScreen<BaseBoardMenu> {
         if (board.getLastMoveX() >= 0) {
             int piece = board.getBoard()[board.getLastMoveY()][board.getLastMoveX()];
             if (piece != 0) {
-                float dotSize = active.getPieceDrawSize() * 0.35F;
+                float dotSize = active.getPieceDrawSize() * 0.45F;
                 int size = Math.round(dotSize * boardScale);
                 int x = Math.round(boardLeft + boardScale * (active.getPieceCenterU(board.getLastMoveX()) - dotSize / 2.0F));
                 int y = Math.round(boardTop + boardScale * (active.getPieceCenterV(board.getLastMoveY()) - dotSize / 2.0F));
