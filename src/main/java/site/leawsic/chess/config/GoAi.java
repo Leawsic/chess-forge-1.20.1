@@ -27,8 +27,8 @@ public final class GoAi {
         moves.sort(Comparator.comparingInt(ScoredMove::score).reversed());
         int best = moves.get(0).score;
         List<Move> pool = new ArrayList<>();
-        for (ScoredMove s : moves) if (s.score >= best - TOLERANCE) pool.add(s);
-        return pool.get(ThreadLocalRandom.current().nextInt(pool.size())).move;
+        for (ScoredMove s : moves) if (s.score >= best - TOLERANCE) pool.add(s.move);
+        return pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
     }
 
     private static int score(int[][] b, int x, int y, int p, int op, Position pos) {

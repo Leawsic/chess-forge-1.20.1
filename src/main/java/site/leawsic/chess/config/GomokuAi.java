@@ -36,8 +36,8 @@ public final class GomokuAi {
         int bestScore = bestByDepth.get(0).score;
         int tolerance = bestScore >= FIVE / 2 || bestScore <= -FIVE / 2
                 ? 2_000 : Math.max(4_000, Math.abs(bestScore) / 60);
-        for (ScoredMove s : bestByDepth) if (s.score >= bestScore - tolerance) pool.add(s);
-        return pool.get(ThreadLocalRandom.current().nextInt(pool.size())).move;
+        for (ScoredMove s : bestByDepth) if (s.score >= bestScore - tolerance) pool.add(s.move);
+        return pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
     }
 
     private static List<ScoredMove> rootSearch(int[][] b, int ai, int depth, long deadline) {
