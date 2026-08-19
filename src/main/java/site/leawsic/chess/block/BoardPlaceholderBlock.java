@@ -9,6 +9,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.RenderShape;
+import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.MapColor;
@@ -21,7 +22,7 @@ public class BoardPlaceholderBlock extends HorizontalDirectionalBlock {
     public static final net.minecraft.world.level.block.state.properties.IntegerProperty OFFSET_Z = net.minecraft.world.level.block.state.properties.IntegerProperty.create("offset_z", 0, 2);
 
     public BoardPlaceholderBlock() {
-        super(BlockBehaviour.Properties.of().mapColor(MapColor.NONE).strength(2.5f).noLootTable().noOcclusion());
+        super(BlockBehaviour.Properties.of().mapColor(MapColor.NONE).strength(2.0f, 3.0f).sound(SoundType.WOOD).noLootTable().noOcclusion());
         registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(OFFSET_X, 0).setValue(OFFSET_Z, 0));
     }
 

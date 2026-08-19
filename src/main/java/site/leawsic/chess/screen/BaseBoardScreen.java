@@ -217,9 +217,17 @@ public class BaseBoardScreen extends AbstractContainerScreen<BaseBoardMenu> {
                     active.getPieceTextureSize(), active.getPieceTextureSize());
         }
         if (board.getLastMoveX() >= 0) {
-            int x = Math.round(boardLeft + boardScale * active.getPieceCenterU(board.getLastMoveX()));
-            int y = Math.round(boardTop + boardScale * active.getPieceCenterV(board.getLastMoveY()));
-            graphics.fill(x - 2, y - 2, x + 2, y + 2, 0xFFE53935);
+            int piece = board.getBoard()[board.getLastMoveY()][board.getLastMoveX()];
+            if (piece != 0) {
+                int size = Math.round(active.getPieceDrawSize() * boardScale);
+                int x = Math.round(boardLeft + boardScale * (active.getPieceCenterU(board.getLastMoveX()) - active.getPieceDrawSize() / 2.0F));
+                int y = Math.round(boardTop + boardScale * (active.getPieceCenterV(board.getLastMoveY()) - active.getPieceDrawSize() / 2.0F));
+                graphics.setColor(1.0F, 0.18F, 0.18F, 0.55F);
+                graphics.blit(texture(active.getPieceTexture(piece)), x, y, size, size, 0, 0,
+                        active.getPieceTextureSize(), active.getPieceTextureSize(),
+                        active.getPieceTextureSize(), active.getPieceTextureSize());
+                graphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
+            }
         }
     }
 
