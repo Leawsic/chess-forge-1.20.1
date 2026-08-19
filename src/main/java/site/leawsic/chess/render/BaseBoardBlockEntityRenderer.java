@@ -21,23 +21,31 @@ public class BaseBoardBlockEntityRenderer implements BlockEntityRenderer<BaseBoa
         ChessGameConfig config = entity.getConfig();
         if (board == null) return;
         pose.pushPose(); applyRotation(pose, entity.getBlockState().getValue(BaseBoardBlock.FACING));
-        float y = 0.05f, start = -1f, size = 3f, texW = config.getBoardTextureWidth();
-        float pieceSize = config.getPieceDrawSize() / texW * size;
+        float yBase = 0.05f, boardSize = 3f, boardStart = -1f;
+        float texW = config.getBoardTextureWidth(), texH = config.getBoardTextureHeight();
+        float pieceSize = config.getPieceDrawSize() / texW * boardSize;
+        float thickness = 1 / 64f;
+        Matrix4f mat = pose.last().pose();
         for (int row = 0; row < config.getRows(); row++) for (int col = 0; col < config.getCols(); col++) {
             int piece = board[row][col]; if (piece == config.getEmptyValue()) continue;
             ResourceLocation texture = new ResourceLocation(Chess.MODID, "textures/" + config.getPieceTexture(piece).getPath() + ".png");
-            float cx = start + config.getPieceCenterU(col) / texW * size;
-            float cz = start + config.getPieceCenterV(row) / config.getBoardTextureHeight() * size;
-            quad(pose.last().pose(), buffers.getBuffer(RenderType.entityTranslucent(texture)), cx - pieceSize / 2, y, cz - pieceSize / 2, cx + pieceSize / 2, y, cz + pieceSize / 2, light, overlay);
+            VertexConsumer buffer = buffers.getBuffer(RenderType.entityTranslucent(texture));
+            float xCenter = boardStart + (config.getPieceCenterU(col) / texW) * boardSize;
+            float zCenter = boardStart + (config.getPieceCenterV(row) / texH) * boardSize;
+            float minX = xCenter - pieceSize / 2, maxX = xCenter + pieceSize / 2;
+            float minZ = zCenter - pieceSize / 2, maxZ = zCenter + pieceSize / 2;
+            float yTop = yBase + thickness;
+            buffer.vertex(mat, minX, yTop, minZ).color(255, 255, 255, 255).uv(0, 0).overlayCoords(overlay).uv2(light).normal(0, 1, 0).endVertex();
+            buffer.vertex(mat, maxX, yTop, minZ).color(255, 255, 255, 255).uv(1, 0).overlayCoords(overlay).uv2(light).normal(0, 1, 0).endVertex();
+            buffer.vertex(mat, maxX, yTop, maxZ).color(255, 255, 255, 255).uv(1, 1).overlayCoords(overlay).uv2(light).normal(0, 1, 0).endVertex();
+            buffer.vertex(mat, minX, yTop, maxZ).color(255, 255, 255, 255).uv(0, 1).overlayCoords(overlay).uv2(light).normal(0, 1, 0).endVertex();
+            buffer.vertex(mat, minX, yBase, minZ).color(255, 255, 255, 255).uv(0, 0).overlayCoords(overlay).uv2(light).normal(0, -1, 0).endVertex();
+            buffer.vertex(mat, maxX, yBase, minZ).color(255, 255, 255, 255).uv(1, 0).overlayCoords(overlay).uv2(light).normal(0, -1, 0).endVertex();
+            buffer.vertex(mat, maxX, yBase, maxZ).color(255, 255, 255, 255).uv(1, 1).overlayCoords(overlay).uv2(light).normal(0, -1, 0).endVertex();
+            buffer.vertex(mat, minX, yBase, maxZ).color(255, 255, 255, 255).uv(0, 1).overlayCoords(overlay).uv2(light).normal(0, -1, 0).endVertex();
         }
         pose.popPose();
     }
-    private static void quad(Matrix4f m, VertexConsumer v, float minX, float y, float minZ, float maxX, float ignored, float maxZ, int light, int overlay) {
-        v.vertex(m, minX, y, minZ).color(255,255,255,255).uv(0,0).overlayCoords(overlay).uv2(light).normal(0,1,0).endVertex();
-        v.vertex(m, maxX, y, minZ).color(255,255,255,255).uv(1,0).overlayCoords(overlay).uv2(light).normal(0,1,0).endVertex();
-        v.vertex(m, maxX, y, maxZ).color(255,255,255,255).uv(1,1).overlayCoords(overlay).uv2(light).normal(0,1,0).endVertex();
-        v.vertex(m, minX, y, maxZ).color(255,255,255,255).uv(0,1).overlayCoords(overlay).uv2(light).normal(0,1,0).endVertex();
-    }
-    private static void applyRotation(PoseStack pose, Direction facing) { float d = facing == Direction.EAST ? 270 : facing == Direction.SOUTH ? 180 : facing == Direction.WEST ? 90 : 0; if (d != 0) { pose.translate(.5,0,.5); pose.mulPose(com.mojang.math.Axis.YP.rotationDegrees(d)); pose.translate(-.5,0,-.5); } }
+    private static void applyRotation(PoseStack pose, Direction facing) { float d = facing == Direction.EAST ? 270 : facing == Direction.SOUTH ? 180 : facing == Direction.WEST ? 90 : 0; if (d != 0) { pose.translate(.5, 0, .5); pose.mulPose(com.mojang.math.Axis.YP.rotationDegrees(d)); pose.translate(-.5, 0, -.5); } }
     @Override public boolean shouldRenderOffScreen(BaseBoardBlockEntity entity) { return true; }
 }
