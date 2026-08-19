@@ -31,14 +31,14 @@ public final class XiangqiAi {
                 List<ScoredMove> result = rootSearch(b, side, depth, deadline);
                 if (result == null) break;
                 bestByDepth = result;
-                if (result.get(0).score >= MATE - 100_000) break;
+                if (result.get(0).orderScore >= MATE - 100_000) break;
             } catch (Abort ignored) { break; }
         }
         List<Move> pool = new ArrayList<>();
-        int bestScore = bestByDepth.get(0).score;
+        int bestScore = bestByDepth.get(0).orderScore;
         int tolerance = Math.abs(bestScore) >= MATE - 100_000 ? 25 : Math.max(35, Math.abs(bestScore) / 40);
-        for (ScoredMove s : bestByDepth) if (s.score >= bestScore - tolerance) pool.add(s);
-        return pool.get(ThreadLocalRandom.current().nextInt(pool.size())).move;
+        for (ScoredMove s : bestByDepth) if (s.orderScore >= bestScore - tolerance) pool.add(s.move);
+        return pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
     }
 
     private static List<ScoredMove> rootSearch(int[][] b, int side, int depth, long deadline) {
