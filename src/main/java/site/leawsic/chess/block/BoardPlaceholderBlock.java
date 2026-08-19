@@ -36,8 +36,18 @@ public class BoardPlaceholderBlock extends HorizontalDirectionalBlock {
     }
 
     @Override public RenderShape getRenderShape(BlockState state) { return RenderShape.INVISIBLE; }
-    @Override public VoxelShape getShape(BlockState state, net.minecraft.world.level.BlockGetter level, BlockPos pos, net.minecraft.world.phys.shapes.CollisionContext context) { return Shapes.empty(); }
-    @Override public VoxelShape getCollisionShape(BlockState state, net.minecraft.world.level.BlockGetter level, BlockPos pos, net.minecraft.world.phys.shapes.CollisionContext context) { return Shapes.empty(); }
+    private static VoxelShape fullBoardShape(BlockState state) {
+        Direction facing = state.getValue(FACING);
+        BlockPos originOffset = BoardMultiblock.offset(BlockPos.ZERO, facing,
+                1 - state.getValue(OFFSET_X), 1 - state.getValue(OFFSET_Z));
+        return Block.box(
+                originOffset.getX() * 16 - 16, 0, originOffset.getZ() * 16 - 16,
+                originOffset.getX() * 16 + 32, 1, originOffset.getZ() * 16 + 32
+        );
+    }
+
+    @Override public VoxelShape getShape(BlockState state, net.minecraft.world.level.BlockGetter level, BlockPos pos, net.minecraft.world.phys.shapes.CollisionContext context) { return fullBoardShape(state); }
+    @Override public VoxelShape getCollisionShape(BlockState state, net.minecraft.world.level.BlockGetter level, BlockPos pos, net.minecraft.world.phys.shapes.CollisionContext context) { return fullBoardShape(state); }
 
     @Override public void playerWillDestroy(Level level, BlockPos pos, BlockState state, Player player) {
         if (level.isClientSide) { super.playerWillDestroy(level, pos, state, player); return; }

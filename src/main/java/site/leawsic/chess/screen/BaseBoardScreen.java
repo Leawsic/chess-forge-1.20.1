@@ -1,10 +1,8 @@
 package site.leawsic.chess.screen;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
@@ -18,31 +16,327 @@ import site.leawsic.chess.network.ChessNetwork;
 import site.leawsic.chess.screen.handler.BaseBoardMenu;
 
 public class BaseBoardScreen extends AbstractContainerScreen<BaseBoardMenu> {
-    private final ChessGameConfig initial;
-    private int boardLeft, boardTop, boardPixels, boardWidth, boardHeight;
-    private float scale; private long escapeAt, noticeUntil; private Component notice;
-    private boolean leftGame; private int selectedPiece = 1;
-    private Button clear, edit, ai, pass, finish, join, leave, hostBlack, hostWhite, gomoku, go, blackPiece, whitePiece;
-    public BaseBoardScreen(BaseBoardMenu menu, Inventory inventory, Component title) { super(menu, inventory, title); initial = menu.board() == null ? GomokuConfig.CONFIG : menu.board().getConfig(); imageWidth=320; imageHeight=280; }
-    public void showNotice(Component value) { notice=value; noticeUntil=System.currentTimeMillis()+5000; }
-    private BaseBoardBlockEntity board() { return menu.board(); }
-    private void send(Object packet) { ChessNetwork.CHANNEL.sendToServer(packet); }
-    private void simple(java.util.function.Function<net.minecraft.core.BlockPos, ?> packet) { if(board()!=null) send(packet.apply(board().getBlockPos())); }
-    @Override protected void init() {
-        super.init(); imageWidth=Math.min(width-32,Math.max(280,initial.getBoardTextureWidth()+32)); imageHeight=Math.min(height-32,Math.max(220,initial.getBoardTextureHeight()+80)); leftPos=(width-imageWidth)/2; topPos=(height-imageHeight)/2;
-        scale=Math.min(1f,Math.min((imageWidth-16)/(float)initial.getBoardTextureWidth(),(imageHeight-72)/(float)initial.getBoardTextureHeight())); boardPixels=Math.round(initial.getBoardTextureWidth()*scale); boardLeft=leftPos+(imageWidth-boardPixels)/2; boardTop=topPos+8; boardWidth=Math.round((initial.getCols()-1)*initial.getBoardCellPixelSize()*scale); boardHeight=Math.round((initial.getRows()-1)*initial.getBoardCellPixelSize()*scale);
-        int y1=topPos+imageHeight-48,y2=topPos+imageHeight-24;
-        clear=button("gui.chess.clear",leftPos+10,y1,60,b->simple(ChessNetwork.ClearBoardPacket::new)); edit=button("gui.chess.edit_mode",leftPos+75,y1,80,b->simple(ChessNetwork.ToggleEditModePacket::new)); ai=button("gui.chess.ai",leftPos+10,y2,70,b->simple(ChessNetwork.ToggleAiPacket::new)); pass=button("gui.chess.pass",leftPos+85,y2,55,b->simple(ChessNetwork.PassTurnPacket::new)); finish=button("gui.chess.go.finish",leftPos+145,y2,70,b->simple(ChessNetwork.FinishGoGamePacket::new));
-        join=button("gui.chess.join",leftPos+imageWidth-120,y1,45,b->{leftGame=false;simple(ChessNetwork.JoinGamePacket::new);}); leave=button("gui.chess.leave",leftPos+imageWidth-70,y1,60,b->{leftGame=true;simple(ChessNetwork.LeaveGamePacket::new);}); hostBlack=button("gui.chess.host_black",leftPos+imageWidth-205,y2,95,b->setColors(1,2)); hostWhite=button("gui.chess.host_white",leftPos+imageWidth-105,y2,95,b->setColors(2,1)); gomoku=button("gui.chess.mode.gomoku",leftPos+imageWidth-115,topPos+4,60,b->mode(0)); go=button("gui.chess.mode.go",leftPos+imageWidth-50,topPos+4,40,b->mode(1)); blackPiece=button("gui.chess.piece.black",leftPos+10,y2,60,b->selectedPiece=1); whitePiece=button("gui.chess.piece.white",leftPos+75,y2,60,b->selectedPiece=2);
+    private static final int MIN_BACKGROUND_WIDTH = 280;
+    private static final int MIN_BACKGROUND_HEIGHT = 220;
+    private static final int MAX_SCREEN_MARGIN = 16;
+    private static final int SIDE_CONTENT_VERTICAL_OFFSET = 24;
+
+    private final ChessGameConfig config;
+    private int boardLeft, boardTop, scaledBoardTextureWidth, scaledBoardTextureHeight;
+    private float boardScale = 1.0f;
+    private Button clearButton, editModeButton, aiButton, passButton, finishGoButton;
+    private Button joinButton, leaveButton, hostBlackButton, hostWhiteButton;
+    private Button modeGomokuButton, modeGoButton;
+    private Button[] pieceSelectButtons;
+    private int selectedPieceType = 1;
+    private boolean localLeftGame;
+    private long lastEscapePress;
+    private Component notice;
+    private long noticeUntil;
+
+    public BaseBoardScreen(BaseBoardMenu menu, Inventory inventory, Component title) {
+        super(menu, inventory, title);
+        config = menu.board() == null ? GomokuConfig.CONFIG : menu.board().getConfig();
+        imageWidth = Math.max(MIN_BACKGROUND_WIDTH, config.getBoardTextureWidth() + 32);
+        imageHeight = Math.max(MIN_BACKGROUND_HEIGHT, config.getBoardTextureHeight() + 80);
     }
-    private Button button(String key,int x,int y,int w,java.util.function.Consumer<Button> action){Button b=Button.builder(Component.translatable(key),action::accept).bounds(x,y,w,20).build();addRenderableWidget(b);return b;}
-    private void setColors(int h,int g){if(board()!=null)send(new ChessNetwork.SetPieceTypesPacket(board().getBlockPos(),h,g));}
-    private void mode(int mode){if(board()!=null)send(new ChessNetwork.SetGameModePacket(board().getBlockPos(),mode));}
-    @Override protected void renderBg(GuiGraphics g,float delta,int mx,int my){BaseBoardBlockEntity b=board();ChessGameConfig c=b==null?initial:b.getConfig();ResourceLocation tex=new ResourceLocation(Chess.MODID,"textures/"+c.getBoardTopTexture().getPath()+".png");g.blit(tex,boardLeft,boardTop,boardPixels,boardPixels,0,0,c.getBoardTextureWidth(),c.getBoardTextureHeight(),c.getBoardTextureWidth(),c.getBoardTextureHeight());if(b==null)return;for(int y=0;y<c.getRows();y++)for(int x=0;x<c.getCols();x++){int p=b.getBoard()[y][x];if(p==0)continue;ResourceLocation pt=new ResourceLocation(Chess.MODID,"textures/"+c.getPieceTexture(p).getPath()+".png");int s=Math.round(c.getPieceDrawSize()*scale),cx=Math.round(boardLeft+scale*(c.getPieceCenterU(x)-c.getPieceDrawSize()/2)),cy=Math.round(boardTop+scale*(c.getPieceCenterV(y)-c.getPieceDrawSize()/2));g.blit(pt,cx,cy,s,s,0,0,c.getPieceTextureSize(),c.getPieceTextureSize(),c.getPieceTextureSize(),c.getPieceTextureSize());}if(b.getLastMoveX()>=0){int cx=Math.round(boardLeft+scale*c.getPieceCenterU(b.getLastMoveX())),cy=Math.round(boardTop+scale*c.getPieceCenterV(b.getLastMoveY()));g.fill(cx-2,cy-2,cx+2,cy+2,0xFFE53935);}}
-    @Override protected void renderLabels(GuiGraphics g,int mx,int my){BaseBoardBlockEntity b=board();if(b==null)return;updateButtons(b);Component status=b.isGameOver()?Component.translatable(b.getWinner()>0?"gui.chess.winner_suffix":"gui.chess.draw"):b.isAiThinking()?Component.translatable("gui.chess.ai_thinking"):b.isEditMode()?Component.translatable("gui.chess.edit_mode"):Component.translatable("gui.chess.turn_format",Component.translatable("gui.chess.piece."+(b.getCurrentPlayer()==1?"black":"white")));g.drawString(font,status,10,10,0xFFFFFFFF,false);if(b.isGameOver())ChessScreenUi.gameOver(g,font,imageWidth,imageHeight,status);if(b.getGameMode()==1){GomokuConfig.Score s=GomokuConfig.calculateScore(b.getBoard(),b.getConfig().getRows(),b.getConfig().getCols());g.drawString(font,Component.translatable("gui.chess.go.black_score",s.blackScore()),10,28,0xFFAAAAAA,false);g.drawString(font,Component.translatable("gui.chess.go.white_score",s.whiteScore()),10,40,0xFFFFFFFF,false);}}
-    private void updateButtons(BaseBoardBlockEntity b){boolean host=minecraft.player!=null&&b.isHost(minecraft.player.getUUID()), player=minecraft.player!=null&&b.isInGame(minecraft.player.getUUID()), active=player&&!b.isGameOver()&&!b.isAiThinking();clear.active=host&&!b.isMultiplayer();edit.active=host&&!b.isMultiplayer()&&!b.isGameOver();ai.active=host&&!b.isMultiplayer()&&!b.isGameOver();pass.active=active&&b.getGameMode()==1&&!b.isEditMode();finish.active=host&&b.getGameMode()==1&&active&&!b.isEditMode();join.active=!player&&b.getGuestPlayer()==null;leave.active=player;hostBlack.active=host&&b.isMultiplayer();hostWhite.active=host&&b.isMultiplayer();gomoku.active=b.getGameMode()!=0;go.active=b.getGameMode()!=1;blackPiece.active=b.isEditMode()&&host;whitePiece.active=b.isEditMode()&&host;}
-    @Override public boolean mouseClicked(double mx,double my,int button){BaseBoardBlockEntity b=board();ChessGameConfig c=b==null?initial:b.getConfig();int col=Math.round((float)((mx-boardLeft)/scale-c.getBoardLeftU())/c.getBoardCellPixelSize()),row=Math.round((float)((my-boardTop)/scale-c.getBoardTopV())/c.getBoardCellPixelSize());if(b!=null&&minecraft.player!=null&&col>=0&&col<c.getCols()&&row>=0&&row<c.getRows()&&b.isInGame(minecraft.player.getUUID())){int p=b.isEditMode()?selectedPiece:b.isMultiplayer()?b.getPlayerPieceType(minecraft.player.getUUID()):b.getCurrentPlayer();if(p!=0&&!b.isGameOver()&&(!b.isAiThinking()&&(b.isEditMode()||!b.isMultiplayer()||p==b.getCurrentPlayer()))){send(new ChessNetwork.PlacePiecePacket(b.getBlockPos(),col,row,p));return true;}}return super.mouseClicked(mx,my,button);}
-    @Override public boolean keyPressed(int key,int scan,int mods){if(key!=GLFW.GLFW_KEY_ESCAPE)return super.keyPressed(key,scan,mods);long now=System.currentTimeMillis();if(now-escapeAt>1500){escapeAt=now;showNotice(Component.translatable("gui.chess.exit_confirm"));return true;}if(board()!=null&&minecraft.player!=null&&board().isInGame(minecraft.player.getUUID()))simple(ChessNetwork.LeaveGamePacket::new);onClose();return true;}
-    @Override public boolean shouldCloseOnEsc(){return false;}
-    @Override public void render(GuiGraphics g,int mx,int my,float delta){renderBackground(g);super.render(g,mx,my,delta);if(notice!=null&&noticeUntil>System.currentTimeMillis())g.drawCenteredString(font,notice,width/2,height/2,0xFFFFFFFF);}
+
+    public void showNotice(Component value) {
+        notice = value;
+        noticeUntil = System.currentTimeMillis() + 5000L;
+    }
+
+    private BaseBoardBlockEntity board() { return menu.board(); }
+
+    private ChessGameConfig activeConfig() {
+        BaseBoardBlockEntity board = board();
+        return board == null ? config : board.getConfig();
+    }
+
+    private void send(Object packet) { ChessNetwork.CHANNEL.sendToServer(packet); }
+
+    private void sendSimple(java.util.function.Function<net.minecraft.core.BlockPos, Object> factory) {
+        if (board() != null) send(factory.apply(board().getBlockPos()));
+    }
+
+    @Override
+    protected void init() {
+        super.init();
+        imageWidth = Math.min(width - MAX_SCREEN_MARGIN * 2,
+                Math.max(MIN_BACKGROUND_WIDTH, config.getBoardTextureWidth() + 32));
+        imageHeight = Math.min(height - MAX_SCREEN_MARGIN * 2,
+                Math.max(MIN_BACKGROUND_HEIGHT, config.getBoardTextureHeight() + 80));
+        leftPos = (width - imageWidth) / 2;
+        topPos = (height - imageHeight) / 2;
+
+        int availableWidth = Math.max(1, imageWidth - 16);
+        int availableHeight = Math.max(1, imageHeight - 72);
+        boardScale = Math.min(1.0F, Math.min(
+                availableWidth / (float) config.getBoardTextureWidth(),
+                availableHeight / (float) config.getBoardTextureHeight()));
+        scaledBoardTextureWidth = Math.round(config.getBoardTextureWidth() * boardScale);
+        scaledBoardTextureHeight = Math.round(config.getBoardTextureHeight() * boardScale);
+        boardLeft = leftPos + (imageWidth - scaledBoardTextureWidth) / 2;
+        boardTop = topPos + Math.max(8, Math.min(30, imageHeight - scaledBoardTextureHeight - 52));
+
+        int buttonY1 = topPos + imageHeight - 48;
+        int buttonY2 = topPos + imageHeight - 24;
+        clearButton = button("gui.chess.clear", leftPos + 10, buttonY1, 60, b -> sendSimple(ChessNetwork.ClearBoardPacket::new));
+        editModeButton = button("gui.chess.edit_mode", leftPos + 75, buttonY1, 80, b -> sendSimple(ChessNetwork.ToggleEditModePacket::new));
+        aiButton = button("gui.chess.ai", leftPos + 145, buttonY2, 70, b -> sendSimple(ChessNetwork.ToggleAiPacket::new));
+        passButton = button("gui.chess.pass", leftPos + 10, buttonY2, 55, b -> sendSimple(ChessNetwork.PassTurnPacket::new));
+        finishGoButton = button("gui.chess.go.finish", leftPos + 70, buttonY2, 70, b -> sendSimple(ChessNetwork.FinishGoGamePacket::new));
+        joinButton = button("gui.chess.join", leftPos + imageWidth - 120, buttonY1, 40, b -> {
+            localLeftGame = false;
+            sendSimple(ChessNetwork.JoinGamePacket::new);
+        });
+        leaveButton = button("gui.chess.leave", leftPos + imageWidth - 75, buttonY1, 65, b -> {
+            localLeftGame = true;
+            sendSimple(ChessNetwork.LeaveGamePacket::new);
+        });
+        hostBlackButton = button("gui.chess.host_black", leftPos + Math.max(10, imageWidth - 205), buttonY2, 95, b -> setPieceTypes(1, 2));
+        hostWhiteButton = button("gui.chess.host_white", leftPos + Math.max(110, imageWidth - 105), buttonY2, 95, b -> setPieceTypes(2, 1));
+        modeGomokuButton = button("gui.chess.mode.gomoku", leftPos + imageWidth - 115, topPos + 4, 60, b -> setGameMode(0));
+        modeGoButton = button("gui.chess.mode.go", leftPos + imageWidth - 50, topPos + 4, 40, b -> setGameMode(1));
+        initPieceSelectButtons();
+        updateButtons(board());
+    }
+
+    private Button button(String key, int x, int y, int width, java.util.function.Consumer<Button> action) {
+        Button button = Button.builder(Component.translatable(key), action::accept)
+                .bounds(x, y, width, 20).build();
+        addRenderableWidget(button);
+        return button;
+    }
+
+    private void initPieceSelectButtons() {
+        int count = config.getPlayerCount();
+        pieceSelectButtons = new Button[count];
+        int y = topPos + imageHeight - 24;
+        for (int i = 0; i < count; i++) {
+            int pieceType = i + 1;
+            int x = leftPos + 10 + i * 60;
+            pieceSelectButtons[i] = button("gui.chess.piece." + config.getPieceType(pieceType).name(), x, y, 55,
+                    b -> {
+                        selectedPieceType = pieceType;
+                        updatePieceButtons(board());
+                    });
+            pieceSelectButtons[i].visible = false;
+        }
+    }
+
+    private void updatePieceButtons(BaseBoardBlockEntity board) {
+        if (pieceSelectButtons == null) return;
+        boolean visible = board != null && board.isEditMode() && !board.isGameOver()
+                && !board.isMultiplayer() && isLocalPlayerInGame(board);
+        for (int i = 0; i < pieceSelectButtons.length; i++) {
+            Button button = pieceSelectButtons[i];
+            int pieceType = i + 1;
+            button.visible = visible;
+            button.active = visible;
+            button.setMessage(Component.translatable("gui.chess.piece." + config.getPieceType(pieceType).name()
+                    + (pieceType == selectedPieceType && visible ? "_selected" : "")));
+        }
+    }
+
+    private void setPieceTypes(int host, int guest) {
+        if (board() != null) send(new ChessNetwork.SetPieceTypesPacket(board().getBlockPos(), host, guest));
+    }
+
+    private void setGameMode(int mode) {
+        if (board() != null) send(new ChessNetwork.SetGameModePacket(board().getBlockPos(), mode));
+    }
+
+    private boolean hasPieces(BaseBoardBlockEntity board) {
+        if (board == null) return false;
+        for (int[] row : board.getBoard()) for (int value : row) if (value != 0) return true;
+        return false;
+    }
+
+    private boolean isLocalPlayerInGame(BaseBoardBlockEntity board) {
+        if (minecraft == null || minecraft.player == null || board == null) return false;
+        return !localLeftGame && (board.isInGame(minecraft.player.getUUID()) ||
+                (!board.isMultiplayer() && board.getHostPlayer() == null));
+    }
+
+    private void updateButtons(BaseBoardBlockEntity board) {
+        if (board == null || minecraft == null || minecraft.player == null) return;
+        boolean host = board.isHost(minecraft.player.getUUID());
+        boolean inGame = isLocalPlayerInGame(board);
+        boolean multiplayer = board.isMultiplayer();
+        boolean full = multiplayer && board.getHostPlayer() != null && board.getGuestPlayer() != null;
+        boolean pieces = hasPieces(board);
+        boolean gameOver = board.isGameOver();
+
+        updatePieceButtons(board);
+        clearButton.visible = !(full && !inGame);
+        editModeButton.visible = !(full && !inGame);
+        aiButton.visible = !(full && !inGame) && !multiplayer;
+        passButton.visible = !(full && !inGame) && activeConfig().supportsPass() && !board.isEditMode() && !gameOver;
+        finishGoButton.visible = !(full && !inGame) && board.getGameMode() == 1 && pieces && !gameOver;
+        joinButton.visible = !inGame && !full;
+        leaveButton.visible = multiplayer && inGame;
+        hostBlackButton.visible = multiplayer && host && !pieces && !gameOver;
+        hostWhiteButton.visible = hostBlackButton.visible;
+        modeGomokuButton.visible = !(full && !inGame);
+        modeGoButton.visible = !(full && !inGame);
+
+        clearButton.active = inGame && (!multiplayer || host) && (pieces || gameOver);
+        editModeButton.active = inGame && !multiplayer && !gameOver;
+        aiButton.active = inGame && !gameOver && (!board.isAiEnabled() || !pieces);
+        aiButton.setMessage(Component.translatable(!board.isAiEnabled() ? "gui.chess.ai"
+                : board.getAiPlayerPieceType() == 1 ? "gui.chess.ai_black" : "gui.chess.ai_white"));
+        passButton.active = inGame && !gameOver && !board.isEditMode();
+        finishGoButton.active = inGame && (!multiplayer || host) && !board.isEditMode();
+        joinButton.active = joinButton.visible;
+        leaveButton.active = leaveButton.visible;
+        hostBlackButton.active = hostBlackButton.visible && board.getHostPieceType() != 1;
+        hostWhiteButton.active = hostWhiteButton.visible && board.getHostPieceType() != 2;
+        boolean canSwitch = inGame && (!multiplayer || host) && !pieces && !gameOver;
+        modeGomokuButton.active = canSwitch && board.getGameMode() != 0;
+        modeGoButton.active = canSwitch && board.getGameMode() != 1;
+    }
+
+    @Override
+    protected void renderBg(GuiGraphics graphics, float delta, int mouseX, int mouseY) {
+        BaseBoardBlockEntity board = board();
+        ChessGameConfig active = activeConfig();
+        ResourceLocation boardTexture = texture(active.getBoardTopTexture());
+        graphics.blit(boardTexture, boardLeft, boardTop, scaledBoardTextureWidth, scaledBoardTextureHeight,
+                0, 0, active.getBoardTextureWidth(), active.getBoardTextureHeight(),
+                active.getBoardTextureWidth(), active.getBoardTextureHeight());
+        if (board == null) return;
+        for (int row = 0; row < active.getRows(); row++) for (int col = 0; col < active.getCols(); col++) {
+            int piece = board.getBoard()[row][col];
+            if (piece == 0) continue;
+            int size = Math.round(active.getPieceDrawSize() * boardScale);
+            int x = Math.round(boardLeft + boardScale * (active.getPieceCenterU(col) - active.getPieceDrawSize() / 2.0F));
+            int y = Math.round(boardTop + boardScale * (active.getPieceCenterV(row) - active.getPieceDrawSize() / 2.0F));
+            graphics.blit(texture(active.getPieceTexture(piece)), x, y, size, size, 0, 0,
+                    active.getPieceTextureSize(), active.getPieceTextureSize(),
+                    active.getPieceTextureSize(), active.getPieceTextureSize());
+        }
+        if (board.getLastMoveX() >= 0) {
+            int x = Math.round(boardLeft + boardScale * active.getPieceCenterU(board.getLastMoveX()));
+            int y = Math.round(boardTop + boardScale * active.getPieceCenterV(board.getLastMoveY()));
+            graphics.fill(x - 2, y - 2, x + 2, y + 2, 0xFFE53935);
+        }
+    }
+
+    private static ResourceLocation texture(ResourceLocation location) {
+        return new ResourceLocation(location.getNamespace(), "textures/" + location.getPath() + ".png");
+    }
+
+    @Override
+    protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
+        BaseBoardBlockEntity board = board();
+        if (board == null) return;
+        updateButtons(board);
+        Component status;
+        if (board.isGameOver()) {
+            status = board.getWinner() > 0
+                    ? Component.translatable("gui.chess.piece." + board.getConfig().getPieceType(board.getWinner()).name())
+                    : Component.translatable("gui.chess.draw");
+            if (board.getWinner() > 0) {
+                status = Component.literal(status.getString()
+                        + Component.translatable("gui.chess.winner_suffix").getString());
+            }
+        } else if (board.isAiThinking()) {
+            status = Component.translatable("gui.chess.ai_thinking");
+        } else if (board.isEditMode()) {
+            status = Component.translatable("gui.chess.edit_mode");
+        } else if (board.isMultiplayer()) {
+            String host = playerName(board.getHostPlayer());
+            String guest = playerName(board.getGuestPlayer());
+            String turn = board.getCurrentPlayer() == board.getHostPieceType() ? host : guest;
+            status = Component.literal(host + " vs " + guest + " | "
+                    + Component.translatable("gui.chess.turn").getString() + ": " + turn);
+        } else {
+            status = Component.translatable("gui.chess.turn_format",
+                    Component.translatable("gui.chess.piece." + (board.getCurrentPlayer() == 1 ? "black" : "white")));
+        }
+        graphics.drawString(font, status, 10, 10, 0xFFFFFF, false);
+        if (board.isGameOver()) ChessScreenUi.gameOver(graphics, font, imageWidth, imageHeight, status);
+        if (board.getGameMode() == 1) {
+            GomokuConfig.Score score = GomokuConfig.calculateScore(board.getBoard(), board.getConfig().getRows(), board.getConfig().getCols());
+            graphics.drawCenteredString(font, Component.translatable("gui.chess.go.black_score", score.blackScore()), imageWidth / 2, imageHeight / 2 - SIDE_CONTENT_VERTICAL_OFFSET - 7, 0xAAAAAA);
+            graphics.drawCenteredString(font, Component.translatable("gui.chess.go.white_score", score.whiteScore()), imageWidth / 2, imageHeight / 2 - SIDE_CONTENT_VERTICAL_OFFSET + 7, 0xFFFFFF);
+        }
+    }
+
+    private String playerName(java.util.UUID uuid) {
+        if (uuid == null || minecraft == null || minecraft.level == null) return "?";
+        var player = minecraft.level.getPlayerByUUID(uuid);
+        return player == null ? "?" : player.getName().getString();
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        ChessGameConfig active = activeConfig();
+        float logicalX = (float) ((mouseX - boardLeft) / boardScale);
+        float logicalY = (float) ((mouseY - boardTop) / boardScale);
+        int boardWidth = Math.round((active.getCols() - 1) * active.getBoardCellPixelSize());
+        int boardHeight = Math.round((active.getRows() - 1) * active.getBoardCellPixelSize());
+        if (logicalX >= active.getBoardLeftU() - 4 && logicalX <= active.getBoardLeftU() + boardWidth + 4
+                && logicalY >= active.getBoardTopV() - 4 && logicalY <= active.getBoardTopV() + boardHeight + 4) {
+            int col = Math.round((logicalX - active.getBoardLeftU()) / active.getBoardCellPixelSize());
+            int row = Math.round((logicalY - active.getBoardTopV()) / active.getBoardCellPixelSize());
+            BaseBoardBlockEntity boardEntity = board();
+            if (boardEntity != null && minecraft != null && minecraft.player != null && isLocalPlayerInGame(boardEntity)
+                    && col >= 0 && col < active.getCols() && row >= 0 && row < active.getRows()) {
+                int piece = boardEntity.isMultiplayer() ? boardEntity.getPlayerPieceType(minecraft.player.getUUID())
+                        : boardEntity.isEditMode() ? selectedPieceType : boardEntity.getCurrentPlayer();
+                if (piece != 0 && !boardEntity.isGameOver() && !boardEntity.isAiThinking()
+                        && (boardEntity.isEditMode() || !boardEntity.isMultiplayer() || piece == boardEntity.getCurrentPlayer())) {
+                    send(new ChessNetwork.PlacePiecePacket(boardEntity.getBlockPos(), col, row, piece));
+                    return true;
+                }
+            }
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode != GLFW.GLFW_KEY_ESCAPE) return super.keyPressed(keyCode, scanCode, modifiers);
+        long now = System.currentTimeMillis();
+        if (now - lastEscapePress > 1500L) {
+            lastEscapePress = now;
+            showNotice(Component.translatable("gui.chess.exit_confirm"));
+            return true;
+        }
+        BaseBoardBlockEntity board = board();
+        if (board != null && minecraft != null && minecraft.player != null && board.isInGame(minecraft.player.getUUID())) {
+            localLeftGame = true;
+            sendSimple(ChessNetwork.LeaveGamePacket::new);
+        }
+        onClose();
+        return true;
+    }
+
+    @Override public boolean shouldCloseOnEsc() { return false; }
+
+    @Override
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
+        renderBackground(graphics);
+        super.render(graphics, mouseX, mouseY, delta);
+        drawNotice(graphics);
+    }
+
+    private void drawNotice(GuiGraphics graphics) {
+        long remaining = noticeUntil - System.currentTimeMillis();
+        if (notice == null || remaining <= 0) { notice = null; return; }
+        int alpha = remaining < 1000L ? (int) (255L * remaining / 1000L) : 255;
+        int leftSpace = boardLeft;
+        int rightSpace = width - boardLeft - scaledBoardTextureWidth;
+        int centerX = leftSpace >= rightSpace ? leftSpace / 2 : boardLeft + scaledBoardTextureWidth + rightSpace / 2;
+        int maxWidth = Math.max(80, Math.max(leftSpace, rightSpace) - 16);
+        var lines = font.split(notice, maxWidth);
+        int top = (height - lines.size() * font.lineHeight) / 2 + SIDE_CONTENT_VERTICAL_OFFSET;
+        for (int i = 0; i < lines.size(); i++) {
+            var line = lines.get(i);
+            graphics.drawString(font, line, centerX - font.width(line) / 2, top + i * font.lineHeight,
+                    (alpha << 24) | 0xFFFFFF, true);
+        }
+    }
 }
