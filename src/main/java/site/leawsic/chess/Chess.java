@@ -8,8 +8,6 @@ import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntityType;
-import net.minecraft.world.level.block.state.BlockBehaviour;
-import net.minecraft.world.level.material.MapColor;
 import net.minecraftforge.common.extensions.IForgeMenuType;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;
@@ -21,6 +19,7 @@ import org.slf4j.Logger;
 import site.leawsic.chess.block.*;
 import site.leawsic.chess.network.ChessNetwork;
 import site.leawsic.chess.screen.handler.*;
+import net.minecraft.network.chat.Component;
 
 @Mod(Chess.MODID)
 public class Chess {
@@ -37,14 +36,19 @@ public class Chess {
     public static final RegistryObject<Block> PLACEHOLDER = BLOCKS.register("placeholder", BoardPlaceholderBlock::new);
     public static final RegistryObject<Block> GOMOKU_BOARD = BLOCKS.register("gomoku_board", BaseBoardBlock::gomoku);
     public static final RegistryObject<Block> XIANGQI_BOARD = BLOCKS.register("xiangqi_board", XiangqiBoardBlock::new);
-    public static final RegistryObject<Item> PLACEHOLDER_ITEM = ITEMS.register("placeholder", () -> new BlockItem(PLACEHOLDER.get(), new Item.Properties()));
     public static final RegistryObject<Item> GOMOKU_BOARD_ITEM = ITEMS.register("gomoku_board", () -> new BlockItem(GOMOKU_BOARD.get(), new Item.Properties()));
     public static final RegistryObject<Item> XIANGQI_BOARD_ITEM = ITEMS.register("xiangqi_board", () -> new BlockItem(XIANGQI_BOARD.get(), new Item.Properties()));
     public static final RegistryObject<BlockEntityType<BaseBoardBlockEntity>> BASE_BOARD_ENTITY = BLOCK_ENTITIES.register("base_board", () -> BlockEntityType.Builder.of(BaseBoardBlockEntity::new, GOMOKU_BOARD.get()).build(null));
     public static final RegistryObject<BlockEntityType<XiangqiBoardBlockEntity>> XIANGQI_ENTITY = BLOCK_ENTITIES.register("xiangqi_board", () -> BlockEntityType.Builder.of(XiangqiBoardBlockEntity::new, XIANGQI_BOARD.get()).build(null));
     public static final RegistryObject<MenuType<BaseBoardMenu>> BASE_BOARD_MENU = MENUS.register("base_board", () -> IForgeMenuType.create(BaseBoardMenu::fromNetwork));
     public static final RegistryObject<MenuType<XiangqiMenu>> XIANGQI_MENU = MENUS.register("xiangqi", () -> IForgeMenuType.create(XiangqiMenu::fromNetwork));
-    public static final RegistryObject<CreativeModeTab> CHESS_GROUP = CREATIVE_MODE_TABS.register("chess_group", () -> CreativeModeTab.builder().icon(() -> GOMOKU_BOARD_ITEM.get().getDefaultInstance()).displayItems((parameters, output) -> { output.accept(GOMOKU_BOARD_ITEM.get()); output.accept(XIANGQI_BOARD_ITEM.get()); }).build());
+    public static final RegistryObject<CreativeModeTab> CHESS_GROUP = CREATIVE_MODE_TABS.register("chess_group", () -> CreativeModeTab.builder()
+            .title(Component.translatable("itemGroup.chess.chess_group"))
+            .icon(() -> GOMOKU_BOARD_ITEM.get().getDefaultInstance())
+            .displayItems((parameters, output) -> {
+                output.accept(GOMOKU_BOARD_ITEM.get());
+                output.accept(XIANGQI_BOARD_ITEM.get());
+            }).build());
 
     public Chess(FMLJavaModLoadingContext context) {
         IEventBus bus = context.getModEventBus();

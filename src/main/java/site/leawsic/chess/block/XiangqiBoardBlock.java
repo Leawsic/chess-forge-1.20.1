@@ -1,6 +1,7 @@
 package site.leawsic.chess.block;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -14,13 +15,23 @@ import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.minecraftforge.network.NetworkHooks;
 
 public class XiangqiBoardBlock extends HorizontalDirectionalBlock implements EntityBlock {
-    public XiangqiBoardBlock() { super(BlockBehaviour.Properties.of().mapColor(MapColor.WOOD).strength(2.5f).noOcclusion()); }
+    public XiangqiBoardBlock() {
+        super(BlockBehaviour.Properties.of().mapColor(MapColor.WOOD).strength(2.5f).noOcclusion());
+        registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH));
+    }
+
+    @Override
+    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+        builder.add(FACING);
+    }
+
     @Override public BlockState getStateForPlacement(BlockPlaceContext context) { BlockState state = defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite()); return BoardMultiblock.canAssemble(context.getLevel(), context.getClickedPos(), state.getValue(FACING)) ? state : null; }
     @Override public void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean moving) { super.onPlace(state, level, pos, oldState, moving); if (!level.isClientSide && oldState.getBlock() != this) BoardMultiblock.assemble(level, pos, state.getValue(FACING)); }
     @Override public BlockEntity newBlockEntity(BlockPos pos, BlockState state) { return new XiangqiBoardBlockEntity(pos, state); }

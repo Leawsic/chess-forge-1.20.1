@@ -13,11 +13,13 @@ import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.minecraftforge.network.NetworkHooks;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.core.Direction;
 
 public class BaseBoardBlock extends HorizontalDirectionalBlock implements EntityBlock {
     public enum GameKind { GOMOKU, GO }
@@ -26,11 +28,17 @@ public class BaseBoardBlock extends HorizontalDirectionalBlock implements Entity
     private BaseBoardBlock(GameKind kind) {
         super(BlockBehaviour.Properties.of().mapColor(MapColor.WOOD).strength(2.5f).noOcclusion());
         this.kind = kind;
+        registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH));
     }
 
     public static BaseBoardBlock gomoku() { return new BaseBoardBlock(GameKind.GOMOKU); }
     public static BaseBoardBlock go() { return new BaseBoardBlock(GameKind.GO); }
     public GameKind gameKind() { return kind; }
+
+    @Override
+    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+        builder.add(FACING);
+    }
 
     @Override public BlockState getStateForPlacement(BlockPlaceContext context) {
         BlockState state = defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
