@@ -183,7 +183,7 @@ public class BaseBoardScreen extends AbstractContainerScreen<BaseBoardMenu> {
 
         clearButton.active = inGame && (!multiplayer || host) && (pieces || gameOver);
         editModeButton.active = inGame && !multiplayer && !gameOver;
-        aiButton.active = inGame && !gameOver && (!board.isAiEnabled() || !pieces);
+        aiButton.active = aiButton.visible && inGame && (board.isAiEnabled() || (!pieces && !gameOver));
         aiButton.setMessage(Component.translatable(!board.isAiEnabled() ? "gui.chess.ai"
                 : board.getAiPlayerPieceType() == 1 ? "gui.chess.ai_black" : "gui.chess.ai_white"));
         passButton.active = inGame && !gameOver && !board.isEditMode();
@@ -219,7 +219,7 @@ public class BaseBoardScreen extends AbstractContainerScreen<BaseBoardMenu> {
         if (board.getLastMoveX() >= 0) {
             int piece = board.getBoard()[board.getLastMoveY()][board.getLastMoveX()];
             if (piece != 0) {
-                float dotSize = active.getPieceDrawSize() * 0.45F;
+                float dotSize = active.getPieceDrawSize() * 0.35F;
                 int size = Math.round(dotSize * boardScale);
                 int x = Math.round(boardLeft + boardScale * (active.getPieceCenterU(board.getLastMoveX()) - dotSize / 2.0F));
                 int y = Math.round(boardTop + boardScale * (active.getPieceCenterV(board.getLastMoveY()) - dotSize / 2.0F));
@@ -268,8 +268,12 @@ public class BaseBoardScreen extends AbstractContainerScreen<BaseBoardMenu> {
         if (board.isGameOver()) ChessScreenUi.gameOver(graphics, font, imageWidth, imageHeight, status);
         if (board.getGameMode() == 1) {
             GomokuConfig.Score score = GomokuConfig.calculateScore(board.getBoard(), board.getConfig().getRows(), board.getConfig().getCols());
-            graphics.drawCenteredString(font, Component.translatable("gui.chess.go.black_score", score.blackScore()), imageWidth / 2, imageHeight / 2 - SIDE_CONTENT_VERTICAL_OFFSET - 7, 0xAAAAAA);
-            graphics.drawCenteredString(font, Component.translatable("gui.chess.go.white_score", score.whiteScore()), imageWidth / 2, imageHeight / 2 - SIDE_CONTENT_VERTICAL_OFFSET + 7, 0xFFFFFF);
+            int leftSpace = boardLeft;
+            int rightSpace = width - boardLeft - scaledBoardTextureWidth;
+            int centerX = (leftSpace >= rightSpace ? leftSpace / 2 : boardLeft + scaledBoardTextureWidth + rightSpace / 2) - leftPos;
+            int centerY = imageHeight / 2 - SIDE_CONTENT_VERTICAL_OFFSET;
+            graphics.drawCenteredString(font, Component.translatable("gui.chess.go.black_score", score.blackScore()), centerX, centerY - 7, 0xAAAAAA);
+            graphics.drawCenteredString(font, Component.translatable("gui.chess.go.white_score", score.whiteScore()), centerX, centerY + 7, 0xFFFFFF);
         }
     }
 
