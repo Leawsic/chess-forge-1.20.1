@@ -42,7 +42,8 @@ public class BaseBoardBlock extends HorizontalDirectionalBlock implements Entity
     }
 
     @Override public BlockState getStateForPlacement(BlockPlaceContext context) {
-        BlockState state = defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
+        // 棋盘朝向与放置者的视线方向一致（而非相对），棋盘近侧才是放置者这一方。
+        BlockState state = defaultBlockState().setValue(FACING, context.getHorizontalDirection());
         return BoardMultiblock.canAssemble(context.getLevel(), context.getClickedPos(), state.getValue(FACING)) ? state : null;
     }
 

@@ -14,6 +14,9 @@
   "gui.chess.ai_white": "人机：玩家白方",
   "gui.chess.clear": "清空",
   "gui.chess.clear_hint": "点击 清空 开始新游戏",
+  "gui.chess.difficulty.easy": "难度：简单",
+  "gui.chess.difficulty.hard": "难度：困难",
+  "gui.chess.difficulty.normal": "难度：普通",
   "gui.chess.draw": "平局",
   "gui.chess.edit_mode": "编辑模式",
   "gui.chess.exit_confirm": "再次按 Esc 退出棋盘；棋局将保留",
@@ -73,5 +76,10 @@
   "gui.chess.xq.rule.rook": "车只能沿横线或竖线走，路径不能有棋子",
   "gui.chess.xq.rule.soldier": "兵卒只能向前走；过河后才能横走，不能后退",
   "gui.chess.xq.self_check": "走子后己方将帅仍被将军，必须应将",
+  "subtitles.chess.check_alert": "将军！",
+  "subtitles.chess.game_lose": "对局失败",
+  "subtitles.chess.game_win": "对局胜利",
+  "subtitles.chess.piece_capture": "吃子",
+  "subtitles.chess.piece_place": "落子",
   "itemGroup.chess.chess_group": "棋类游戏"
 }

@@ -2,6 +2,7 @@ package site.leawsic.chess;
 
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTab;
@@ -32,6 +33,18 @@ public class Chess {
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(ForgeRegistries.BLOCK_ENTITY_TYPES, MODID);
     public static final DeferredRegister<MenuType<?>> MENUS = DeferredRegister.create(ForgeRegistries.MENU_TYPES, MODID);
     public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
+    public static final DeferredRegister<SoundEvent> SOUNDS = DeferredRegister.create(ForgeRegistries.SOUND_EVENTS, MODID);
+
+    /** 音效资源由 {@code tools/generate_sounds.py} 合成，全部为程序生成，无外部素材。 */
+    public static final RegistryObject<SoundEvent> PIECE_PLACE = sound("piece_place");
+    public static final RegistryObject<SoundEvent> PIECE_CAPTURE = sound("piece_capture");
+    public static final RegistryObject<SoundEvent> GAME_WIN = sound("game_win");
+    public static final RegistryObject<SoundEvent> GAME_LOSE = sound("game_lose");
+    public static final RegistryObject<SoundEvent> CHECK_ALERT = sound("check_alert");
+
+    private static RegistryObject<SoundEvent> sound(String name) {
+        return SOUNDS.register(name, () -> SoundEvent.createVariableRangeEvent(id(name)));
+    }
 
     public static final RegistryObject<Block> PLACEHOLDER = BLOCKS.register("placeholder", BoardPlaceholderBlock::new);
     public static final RegistryObject<Block> GOMOKU_BOARD = BLOCKS.register("gomoku_board", BaseBoardBlock::gomoku);
@@ -52,7 +65,7 @@ public class Chess {
 
     public Chess(FMLJavaModLoadingContext context) {
         IEventBus bus = context.getModEventBus();
-        BLOCKS.register(bus); ITEMS.register(bus); BLOCK_ENTITIES.register(bus); MENUS.register(bus); CREATIVE_MODE_TABS.register(bus);
+        BLOCKS.register(bus); ITEMS.register(bus); BLOCK_ENTITIES.register(bus); MENUS.register(bus); CREATIVE_MODE_TABS.register(bus); SOUNDS.register(bus);
         ChessNetwork.init();
         LOGGER.info("Chess Forge port initialized");
     }

@@ -23,7 +23,6 @@ public final class XiangqiAi {
     private static final int LIMIT_DEPTH = 40, MAX_MOVES = 128, NULL_REDUCTION = 2;
     private static final int TT_MASK = (1 << 17) - 1;
     private static final int FLAG_ALPHA = 1, FLAG_BETA = 2, FLAG_PV = 3;
-    private static final long DEFAULT_BUDGET_NANOS = 900_000_000L;
 
     private static final int[][] GENERAL_STEPS = {{0, 1}, {0, -1}, {1, 0}, {-1, 0}};
     private static final int[][] ADVISOR_STEPS = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
@@ -53,6 +52,8 @@ public final class XiangqiAi {
 
     private final int[][] board;
     private final long budgetNanos;
+    private final int depthLimit;
+    private final float blunderChance;
     private final long[] ttKey = new long[TT_MASK + 1];
     private final int[] ttData = new int[TT_MASK + 1];
     private final int[] ttMove = new int[TT_MASK + 1];
@@ -61,26 +62,32 @@ public final class XiangqiAi {
     private final int[][] moveBuffer = new int[LIMIT_DEPTH][MAX_MOVES];
     private final int[][] scoreBuffer = new int[LIMIT_DEPTH][MAX_MOVES];
     private final long[] pathKeys = new long[LIMIT_DEPTH];
+    /** 根节点每个合法走法的得分，供难度降级时挑选次优着法。 */
+    private final int[] rootMoves = new int[MAX_MOVES];
+    private final int[] rootScores = new int[MAX_MOVES];
+    private int rootCount;
     private long zobrist;
     private long deadline;
     private int ply;
     private int rootMove;
     private boolean aborted;
 
-    private XiangqiAi(int[][] board, long budgetNanos) {
+    private XiangqiAi(int[][] board, AiDifficulty difficulty) {
         this.board = board;
-        this.budgetNanos = budgetNanos;
+        this.budgetNanos = difficulty.budgetNanos();
+        this.depthLimit = Math.min(LIMIT_DEPTH, difficulty.maxDepth());
+        this.blunderChance = difficulty.blunderChance();
     }
 
     /** 为 {@code side} 方选择一步走法，返回 {@code null} 表示无合法走法（被杀或困毙）。 */
     public static Move chooseMove(int[][] board, int side) {
-        return chooseMove(board, side, DEFAULT_BUDGET_NANOS);
+        return chooseMove(board, side, AiDifficulty.HARD);
     }
 
-    public static Move chooseMove(int[][] board, int side, long budgetNanos) {
+    public static Move chooseMove(int[][] board, int side, AiDifficulty difficulty) {
         int[][] working = new int[board.length][];
         for (int y = 0; y < board.length; y++) working[y] = board[y].clone();
-        Move chosen = new XiangqiAi(working, budgetNanos).search(side);
+        Move chosen = new XiangqiAi(working, difficulty).search(side);
         // 生成器与规则表理论上等价，但棋盘完整性不能依赖这个假设，落子前再校验一次。
         return chosen != null && isFullyLegal(board, side, chosen) ? chosen : fallbackMove(board, side);
     }
@@ -90,7 +97,7 @@ public final class XiangqiAi {
         deadline = System.nanoTime() + budgetNanos;
         rootMove = 0;
         int best = 0;
-        for (int depth = 1; depth <= LIMIT_DEPTH; depth++) {
+        for (int depth = 1; depth <= depthLimit; depth++) {
             rootMove = best;
             int score = searchRoot(side, depth);
             if (aborted) break;
@@ -99,13 +106,40 @@ public final class XiangqiAi {
             if (score > WIN || score < -WIN) break;
             if (System.nanoTime() > deadline) break;
         }
-        return best == 0 ? null : decode(best);
+        if (best == 0) return null;
+        int played = applyBlunder(best);
+        return decode(played);
+    }
+
+    /**
+     * 低难度下按概率放弃最优着法。取分值排名第 2、3 位的着法之一，
+     * 而不是完全随机走子 —— 次优着法看起来像漏看，随机着法看起来像坏了。
+     */
+    private int applyBlunder(int best) {
+        if (blunderChance <= 0 || rootCount < 2) return best;
+        if (ThreadLocalRandom.current().nextFloat() >= blunderChance) return best;
+        int secondMove = 0, secondScore = Integer.MIN_VALUE, thirdMove = 0, thirdScore = Integer.MIN_VALUE;
+        for (int i = 0; i < rootCount; i++) {
+            if (rootMoves[i] == best) continue;
+            if (rootScores[i] > secondScore) {
+                thirdMove = secondMove; thirdScore = secondScore;
+                secondMove = rootMoves[i]; secondScore = rootScores[i];
+            } else if (rootScores[i] > thirdScore) {
+                thirdMove = rootMoves[i]; thirdScore = rootScores[i];
+            }
+        }
+        if (secondMove == 0) return best;
+        // 送将或被杀的走法不选，失误也该有底线。
+        if (secondScore < -WIN) return best;
+        if (thirdMove != 0 && thirdScore > -WIN && ThreadLocalRandom.current().nextBoolean()) return thirdMove;
+        return secondMove;
     }
 
     private int searchRoot(int side, int depth) {
         int count = generate(side, ply, false);
         orderMoves(side, ply, count, rootMove);
         int bestScore = -MATE, bestMove = 0, legal = 0;
+        rootCount = 0;
         // 同分走法收集起来随机取一个，避免同一局面永远走出同一步。
         int[] tied = new int[MAX_MOVES];
         int tiedCount = 0;
@@ -130,6 +164,7 @@ public final class XiangqiAi {
             }
             unmake(move, captured);
             if (aborted) break;
+            if (rootCount < MAX_MOVES) { rootMoves[rootCount] = move; rootScores[rootCount] = score; rootCount++; }
             if (score > bestScore) {
                 bestScore = score;
                 bestMove = move;
@@ -151,7 +186,7 @@ public final class XiangqiAi {
         if (depth <= 0) return quiescence(side, alpha, beta);
         if (checkTime()) return 0;
         if (ply > 0 && isRepetition()) return 0;
-        if (ply >= LIMIT_DEPTH - 2) return evaluate(side);
+        if (ply >= depthLimit + 4 || ply >= LIMIT_DEPTH - 2) return evaluate(side);
 
         int index = (int) (zobrist & TT_MASK);
         int hashMove = 0;

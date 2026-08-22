@@ -15,6 +15,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import site.leawsic.chess.Chess;
+import site.leawsic.chess.config.AiDifficulty;
 import site.leawsic.chess.config.AiScheduler;
 import site.leawsic.chess.config.XiangqiAi;
 import site.leawsic.chess.config.XiangqiConfig;
@@ -32,6 +33,7 @@ public class XiangqiBoardBlockEntity extends BlockEntity implements MenuProvider
     private int guestPieceType = XiangqiConfig.BLACK;
     private boolean aiEnabled;
     private int aiPlayerPieceType = XiangqiConfig.RED;
+    private AiDifficulty aiDifficulty = AiDifficulty.NORMAL;
     private boolean aiThinking;
     private int aiGeneration;
     private boolean hasMoved;
@@ -53,6 +55,7 @@ public class XiangqiBoardBlockEntity extends BlockEntity implements MenuProvider
     public int getGuestPieceType() { return guestPieceType; }
     public boolean isAiEnabled() { return aiEnabled; }
     public int getAiPlayerPieceType() { return aiPlayerPieceType; }
+    public AiDifficulty getAiDifficulty() { return aiDifficulty; }
     public boolean isAiThinking() { return aiThinking; }
     public int getLastFromX() { return lastFromX; }
     public int getLastFromY() { return lastFromY; }
@@ -98,6 +101,12 @@ public class XiangqiBoardBlockEntity extends BlockEntity implements MenuProvider
         resetBoard(aiEnabled || isGameStarted() ? XiangqiConfig.RED : hostPieceType); if (aiEnabled && currentPlayer != aiPlayerPieceType) scheduleAiMove(); sync(); return true;
     }
 
+    /** 循环切换 AI 难度。对局进行中也允许调整，立即对下一步生效。 */
+    public boolean cycleAiDifficulty(UUID player) {
+        if (multiplayer || hostPlayer != null && !isHost(player)) return false;
+        aiDifficulty = aiDifficulty.next(); sync(); return true;
+    }
+
     public String tryMove(int fromX, int fromY, int toX, int toY, UUID player) {
         if (gameOver) return "gui.chess.xq.game_over";
         if (multiplayer) { if (!isInGame(player)) return "gui.chess.xq.not_player"; if (getPlayerPieceType(player) != currentPlayer) return "gui.chess.xq.not_your_turn"; }
@@ -111,22 +120,36 @@ public class XiangqiBoardBlockEntity extends BlockEntity implements MenuProvider
         if (!XiangqiConfig.isLegalMove(board, fromX, fromY, toX, toY)) return XiangqiConfig.moveRuleKey(piece);
         int captured = board[toY][toX]; board[toY][toX] = piece; board[fromY][fromX] = 0;
         if (XiangqiConfig.isInCheck(board, currentPlayer)) { board[fromY][fromX] = piece; board[toY][toX] = captured; return "gui.chess.xq.self_check"; }
-        recordLastMove(fromX, fromY, toX, toY); hasMoved = true; finishMove(captured); if (aiEnabled && !gameOver && currentPlayer != aiPlayerPieceType) scheduleAiMove(); sync(); return null;
+        recordLastMove(fromX, fromY, toX, toY); hasMoved = true; BoardSounds.place(this, captured != 0); finishMove(captured); if (aiEnabled && !gameOver && currentPlayer != aiPlayerPieceType) scheduleAiMove(); sync(); return null;
     }
 
     private void scheduleAiMove() {
         if (aiThinking || !aiEnabled || gameOver || currentPlayer == aiPlayerPieceType || !(level instanceof ServerLevel server)) return;
-        aiThinking = true; int generation = ++aiGeneration; int side = currentPlayer; int[][] snapshot = copyBoard(); sync();
+        aiThinking = true; int generation = ++aiGeneration; int side = currentPlayer; int[][] snapshot = copyBoard(); AiDifficulty difficulty = aiDifficulty; sync();
         // 搜索在 AI 线程完成，只把结果切回主线程应用，避免阻塞服务器 tick。
-        AiScheduler.think(() -> { XiangqiAi.Move move = XiangqiAi.chooseMove(snapshot, side); server.getServer().execute(() -> finishAiMove(move, side, generation)); });
+        AiScheduler.think(() -> { XiangqiAi.Move move = XiangqiAi.chooseMove(snapshot, side, difficulty); server.getServer().execute(() -> finishAiMove(move, side, generation)); });
     }
     private void finishAiMove(XiangqiAi.Move move, int side, int generation) {
         if (generation != aiGeneration || !aiEnabled || gameOver || currentPlayer != side) return;
         aiThinking = false;
         if (move == null) { gameOver = true; winner = -currentPlayer; sync(); return; }
-        int captured = board[move.toY()][move.toX()]; board[move.toY()][move.toX()] = board[move.fromY()][move.fromX()]; board[move.fromY()][move.fromX()] = 0; recordLastMove(move.fromX(), move.fromY(), move.toX(), move.toY()); finishMove(captured); sync();
+        int captured = board[move.toY()][move.toX()]; board[move.toY()][move.toX()] = board[move.fromY()][move.fromX()]; board[move.fromY()][move.fromX()] = 0; recordLastMove(move.fromX(), move.fromY(), move.toX(), move.toY()); BoardSounds.place(this, captured != 0); finishMove(captured); sync();
     }
-    private void finishMove(int captured) { if (Math.abs(captured) == XiangqiConfig.GENERAL) { gameOver = true; winner = currentPlayer; return; } currentPlayer = -currentPlayer; if (!XiangqiConfig.hasLegalResponse(board, currentPlayer)) { gameOver = true; winner = -currentPlayer; } }
+    /**
+     * 切换走子方并判定终局，同时播放将军 / 胜负音效。
+     * 胜负音以人类玩家的视角判定：人机模式下 AI 获胜则播放失败音。
+     */
+    private void finishMove(int captured) {
+        if (Math.abs(captured) == XiangqiConfig.GENERAL) { gameOver = true; winner = currentPlayer; announceResult(); return; }
+        currentPlayer = -currentPlayer;
+        if (!XiangqiConfig.hasLegalResponse(board, currentPlayer)) { gameOver = true; winner = -currentPlayer; announceResult(); return; }
+        if (XiangqiConfig.isInCheck(board, currentPlayer)) BoardSounds.check(this);
+    }
+    private void announceResult() {
+        // 双人对局无法用单一音效表达双方结果，统一播放胜利音。
+        boolean humanWon = !aiEnabled || winner == aiPlayerPieceType;
+        BoardSounds.gameOver(this, humanWon);
+    }
     private void resetBoard(int firstPlayer) { cancelAiMove(); board = XiangqiConfig.createInitialBoard(); currentPlayer = firstPlayer; gameOver = false; winner = 0; hasMoved = false; lastFromX = lastFromY = lastToX = lastToY = -1; }
     private void clearSession() { cancelAiMove(); hostPlayer = null; guestPlayer = null; multiplayer = false; aiEnabled = false; hostPieceType = XiangqiConfig.RED; guestPieceType = XiangqiConfig.BLACK; aiPlayerPieceType = XiangqiConfig.RED; }
     private void recordLastMove(int fromX, int fromY, int toX, int toY) { lastFromX = fromX; lastFromY = fromY; lastToX = toX; lastToY = toY; }
@@ -137,8 +160,8 @@ public class XiangqiBoardBlockEntity extends BlockEntity implements MenuProvider
 
     @Override public Component getDisplayName() { return Component.translatable("block.chess.xiangqi_board"); }
     @Override public AbstractContainerMenu createMenu(int id, Inventory inventory, Player player) { return new XiangqiMenu(id, inventory, this); }
-    @Override protected void saveAdditional(CompoundTag tag) { super.saveAdditional(tag); tag.putIntArray("Board", flatten()); tag.putInt("CurrentPlayer", currentPlayer); tag.putBoolean("GameOver", gameOver); tag.putInt("Winner", winner); if (hostPlayer != null) tag.putUUID("HostPlayer", hostPlayer); if (guestPlayer != null) tag.putUUID("GuestPlayer", guestPlayer); tag.putBoolean("Multiplayer", multiplayer); tag.putInt("HostPieceType", hostPieceType); tag.putInt("GuestPieceType", guestPieceType); tag.putBoolean("AiEnabled", aiEnabled); tag.putInt("AiPlayerPieceType", aiPlayerPieceType); tag.putBoolean("HasMoved", hasMoved); tag.putInt("LastFromX", lastFromX); tag.putInt("LastFromY", lastFromY); tag.putInt("LastToX", lastToX); tag.putInt("LastToY", lastToY); }
-    @Override public void load(CompoundTag tag) { super.load(tag); board = new int[XiangqiConfig.ROWS][XiangqiConfig.COLS]; int[] values = tag.getIntArray("Board"); for (int i = 0; i < values.length && i < XiangqiConfig.ROWS * XiangqiConfig.COLS; i++) board[i / XiangqiConfig.COLS][i % XiangqiConfig.COLS] = values[i]; currentPlayer = tag.contains("CurrentPlayer") ? tag.getInt("CurrentPlayer") : XiangqiConfig.RED; gameOver = tag.getBoolean("GameOver"); winner = tag.getInt("Winner"); hostPlayer = tag.hasUUID("HostPlayer") ? tag.getUUID("HostPlayer") : null; guestPlayer = tag.hasUUID("GuestPlayer") ? tag.getUUID("GuestPlayer") : null; multiplayer = tag.getBoolean("Multiplayer"); hostPieceType = tag.contains("HostPieceType") ? tag.getInt("HostPieceType") : XiangqiConfig.RED; guestPieceType = tag.contains("GuestPieceType") ? tag.getInt("GuestPieceType") : XiangqiConfig.BLACK; aiEnabled = tag.getBoolean("AiEnabled"); aiPlayerPieceType = tag.contains("AiPlayerPieceType") ? tag.getInt("AiPlayerPieceType") : XiangqiConfig.RED; hasMoved = tag.getBoolean("HasMoved"); lastFromX = tag.contains("LastFromX") ? tag.getInt("LastFromX") : -1; lastFromY = tag.contains("LastFromY") ? tag.getInt("LastFromY") : -1; lastToX = tag.contains("LastToX") ? tag.getInt("LastToX") : -1; lastToY = tag.contains("LastToY") ? tag.getInt("LastToY") : -1; }
+    @Override protected void saveAdditional(CompoundTag tag) { super.saveAdditional(tag); tag.putIntArray("Board", flatten()); tag.putInt("CurrentPlayer", currentPlayer); tag.putBoolean("GameOver", gameOver); tag.putInt("Winner", winner); if (hostPlayer != null) tag.putUUID("HostPlayer", hostPlayer); if (guestPlayer != null) tag.putUUID("GuestPlayer", guestPlayer); tag.putBoolean("Multiplayer", multiplayer); tag.putInt("HostPieceType", hostPieceType); tag.putInt("GuestPieceType", guestPieceType); tag.putBoolean("AiEnabled", aiEnabled); tag.putInt("AiPlayerPieceType", aiPlayerPieceType); tag.putInt("AiDifficulty", aiDifficulty.id()); tag.putBoolean("HasMoved", hasMoved); tag.putInt("LastFromX", lastFromX); tag.putInt("LastFromY", lastFromY); tag.putInt("LastToX", lastToX); tag.putInt("LastToY", lastToY); }
+    @Override public void load(CompoundTag tag) { super.load(tag); board = new int[XiangqiConfig.ROWS][XiangqiConfig.COLS]; int[] values = tag.getIntArray("Board"); for (int i = 0; i < values.length && i < XiangqiConfig.ROWS * XiangqiConfig.COLS; i++) board[i / XiangqiConfig.COLS][i % XiangqiConfig.COLS] = values[i]; currentPlayer = tag.contains("CurrentPlayer") ? tag.getInt("CurrentPlayer") : XiangqiConfig.RED; gameOver = tag.getBoolean("GameOver"); winner = tag.getInt("Winner"); hostPlayer = tag.hasUUID("HostPlayer") ? tag.getUUID("HostPlayer") : null; guestPlayer = tag.hasUUID("GuestPlayer") ? tag.getUUID("GuestPlayer") : null; multiplayer = tag.getBoolean("Multiplayer"); hostPieceType = tag.contains("HostPieceType") ? tag.getInt("HostPieceType") : XiangqiConfig.RED; guestPieceType = tag.contains("GuestPieceType") ? tag.getInt("GuestPieceType") : XiangqiConfig.BLACK; aiEnabled = tag.getBoolean("AiEnabled"); aiPlayerPieceType = tag.contains("AiPlayerPieceType") ? tag.getInt("AiPlayerPieceType") : XiangqiConfig.RED; aiDifficulty = AiDifficulty.byId(tag.contains("AiDifficulty") ? tag.getInt("AiDifficulty") : AiDifficulty.NORMAL.id()); hasMoved = tag.getBoolean("HasMoved"); lastFromX = tag.contains("LastFromX") ? tag.getInt("LastFromX") : -1; lastFromY = tag.contains("LastFromY") ? tag.getInt("LastFromY") : -1; lastToX = tag.contains("LastToX") ? tag.getInt("LastToX") : -1; lastToY = tag.contains("LastToY") ? tag.getInt("LastToY") : -1; }
     @Override public CompoundTag getUpdateTag() { return saveWithoutMetadata(); }
     @Override public Packet<ClientGamePacketListener> getUpdatePacket() { return ClientboundBlockEntityDataPacket.create(this); }
     private int[] flatten() { int[] values = new int[XiangqiConfig.ROWS * XiangqiConfig.COLS]; int index = 0; for (int[] row : board) for (int value : row) values[index++] = value; return values; }

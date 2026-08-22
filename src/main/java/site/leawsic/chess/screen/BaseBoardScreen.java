@@ -24,7 +24,7 @@ public class BaseBoardScreen extends AbstractContainerScreen<BaseBoardMenu> {
     private final ChessGameConfig config;
     private int boardLeft, boardTop, scaledBoardTextureWidth, scaledBoardTextureHeight;
     private float boardScale = 1.0f;
-    private Button clearButton, editModeButton, aiButton, passButton, finishGoButton;
+    private Button clearButton, editModeButton, aiButton, difficultyButton, passButton, finishGoButton;
     private Button joinButton, leaveButton, hostBlackButton, hostWhiteButton;
     private Button modeGomokuButton, modeGoButton;
     private Button[] pieceSelectButtons;
@@ -84,6 +84,7 @@ public class BaseBoardScreen extends AbstractContainerScreen<BaseBoardMenu> {
         clearButton = button("gui.chess.clear", leftPos + 10, buttonY1, 60, b -> sendSimple(ChessNetwork.ClearBoardPacket::new));
         editModeButton = button("gui.chess.edit_mode", leftPos + 75, buttonY1, 80, b -> sendSimple(ChessNetwork.ToggleEditModePacket::new));
         aiButton = button("gui.chess.ai", leftPos + 145, buttonY2, 70, b -> sendSimple(ChessNetwork.ToggleAiPacket::new));
+        difficultyButton = button("gui.chess.difficulty.normal", leftPos + 220, buttonY2, 55, b -> sendSimple(ChessNetwork.CycleAiDifficultyPacket::new));
         passButton = button("gui.chess.pass", leftPos + 10, buttonY2, 55, b -> sendSimple(ChessNetwork.PassTurnPacket::new));
         finishGoButton = button("gui.chess.go.finish", leftPos + 70, buttonY2, 70, b -> sendSimple(ChessNetwork.FinishGoGamePacket::new));
         joinButton = button("gui.chess.join", leftPos + imageWidth - 120, buttonY1, 40, b -> {
@@ -172,6 +173,7 @@ public class BaseBoardScreen extends AbstractContainerScreen<BaseBoardMenu> {
         clearButton.visible = !(full && !inGame);
         editModeButton.visible = !(full && !inGame);
         aiButton.visible = !(full && !inGame) && !multiplayer;
+        difficultyButton.visible = aiButton.visible && board.isAiEnabled();
         passButton.visible = !(full && !inGame) && activeConfig().supportsPass() && !board.isEditMode() && !gameOver;
         finishGoButton.visible = !(full && !inGame) && board.getGameMode() == 1 && pieces && !gameOver;
         joinButton.visible = !inGame && !full;
@@ -186,6 +188,9 @@ public class BaseBoardScreen extends AbstractContainerScreen<BaseBoardMenu> {
         aiButton.active = aiButton.visible && inGame && (board.isAiEnabled() || (!pieces && !gameOver));
         aiButton.setMessage(Component.translatable(!board.isAiEnabled() ? "gui.chess.ai"
                 : board.getAiPlayerPieceType() == 1 ? "gui.chess.ai_black" : "gui.chess.ai_white"));
+        // 难度按钮只在人机模式下有意义。
+        difficultyButton.active = difficultyButton.visible && inGame;
+        difficultyButton.setMessage(Component.translatable(board.getAiDifficulty().translationKey()));
         passButton.active = inGame && !gameOver && !board.isEditMode();
         finishGoButton.active = inGame && (!multiplayer || host) && !board.isEditMode();
         joinButton.active = joinButton.visible;

@@ -14,6 +14,9 @@
   "gui.chess.ai_white": "AI: You White",
   "gui.chess.clear": "Clear",
   "gui.chess.clear_hint": "Click Clear to start a new game",
+  "gui.chess.difficulty.easy": "Easy",
+  "gui.chess.difficulty.hard": "Hard",
+  "gui.chess.difficulty.normal": "Normal",
   "gui.chess.draw": "Draw",
   "gui.chess.edit_mode": "Edit Mode",
   "gui.chess.exit_confirm": "Press Esc again to leave the board; the game will be preserved",
@@ -73,5 +76,10 @@
   "gui.chess.xq.rule.rook": "The rook moves orthogonally with no pieces in its path",
   "gui.chess.xq.rule.soldier": "The soldier moves forward; after crossing the river it may also move sideways, never backward",
   "gui.chess.xq.self_check": "Your general would still be in check; you must respond to the check",
+  "subtitles.chess.check_alert": "Check!",
+  "subtitles.chess.game_lose": "Game lost",
+  "subtitles.chess.game_win": "Game won",
+  "subtitles.chess.piece_capture": "Piece captured",
+  "subtitles.chess.piece_place": "Piece placed",
   "itemGroup.chess.chess_group": "Chess Game"
 }

@@ -1,0 +1,37 @@
+{
+  "piece_place": {
+    "category": "block",
+    "subtitle": "subtitles.chess.piece_place",
+    "sounds": [
+      "chess:piece_place"
+    ]
+  },
+  "piece_capture": {
+    "category": "block",
+    "subtitle": "subtitles.chess.piece_capture",
+    "sounds": [
+      "chess:piece_capture"
+    ]
+  },
+  "game_win": {
+    "category": "block",
+    "subtitle": "subtitles.chess.game_win",
+    "sounds": [
+      "chess:game_win"
+    ]
+  },
+  "game_lose": {
+    "category": "block",
+    "subtitle": "subtitles.chess.game_lose",
+    "sounds": [
+      "chess:game_lose"
+    ]
+  },
+  "check_alert": {
+    "category": "block",
+    "subtitle": "subtitles.chess.check_alert",
+    "sounds": [
+      "chess:check_alert"
+    ]
+  }
+}

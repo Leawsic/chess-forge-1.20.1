@@ -14,16 +14,22 @@ import java.util.concurrent.ThreadLocalRandom;
  *
  * <p>围棋没有可靠的手写局面评估函数，深搜收益很低，因此这里不做树搜索，
  * 而是把提子、救子、打吃、眼位、边线等要素编成权重打分，在近似最优的点位中随机选择。
+ *
+ * <p>难度通过放宽「可接受分差」实现：档位越低容忍区间越大，
+ * 于是 AI 会从更多平庸的点位里随机挑选，表现得更松散。
  */
 public final class GoAi {
     private static final int[][] DIRECTIONS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
     private static final int[][] DIAGONALS = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
-    private static final int TOLERANCE = 900;
 
     private GoAi() {}
 
     /** 为 {@code p} 方选点，{@code koX}/{@code koY} 为禁着点（劫），无处可下返回 {@code null}（弃一手）。 */
     public static Move chooseMove(int[][] b, int p, int koX, int koY) {
+        return chooseMove(b, p, koX, koY, AiDifficulty.HARD);
+    }
+
+    public static Move chooseMove(int[][] b, int p, int koX, int koY, AiDifficulty difficulty) {
         int op = other(p);
         List<ScoredMove> moves = new ArrayList<>();
         for (int y = 0; y < b.length; y++) for (int x = 0; x < b[0].length; x++) {
@@ -35,9 +41,19 @@ public final class GoAi {
         if (moves.isEmpty()) return null;
         moves.sort(Comparator.comparingInt(ScoredMove::score).reversed());
         int best = moves.get(0).score;
+        int tolerance = tolerance(difficulty);
         List<Move> pool = new ArrayList<>();
-        for (ScoredMove s : moves) if (s.score >= best - TOLERANCE) pool.add(s.move);
+        for (ScoredMove s : moves) if (s.score >= best - tolerance) pool.add(s.move);
         return pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
+    }
+
+    /** 可接受分差：越大则候选池越宽，落子越随意。 */
+    private static int tolerance(AiDifficulty difficulty) {
+        return switch (difficulty) {
+            case EASY -> 6_000;
+            case NORMAL -> 2_200;
+            case HARD -> 900;
+        };
     }
 
     private static int score(int[][] b, int x, int y, int p, int op, Position pos) {

@@ -17,6 +17,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import site.leawsic.chess.Chess;
+import site.leawsic.chess.config.AiDifficulty;
 import site.leawsic.chess.config.AiScheduler;
 import site.leawsic.chess.config.ChessGameConfig;
 import site.leawsic.chess.config.GoAi;
@@ -45,6 +46,7 @@ public class BaseBoardBlockEntity extends BlockEntity implements MenuProvider {
     private int guestPieceType = 2;
     private boolean aiEnabled;
     private int aiPlayerPieceType = 1;
+    private AiDifficulty aiDifficulty = AiDifficulty.NORMAL;
     private boolean aiThinking;
     private int aiGeneration;
     private int lastMoveX = -1;
@@ -80,6 +82,7 @@ public class BaseBoardBlockEntity extends BlockEntity implements MenuProvider {
     public int getGuestPieceType() { return guestPieceType; }
     public boolean isAiEnabled() { return aiEnabled; }
     public int getAiPlayerPieceType() { return aiPlayerPieceType; }
+    public AiDifficulty getAiDifficulty() { return aiDifficulty; }
     public boolean isAiThinking() { return aiThinking; }
     public int getLastMoveX() { return lastMoveX; }
     public int getLastMoveY() { return lastMoveY; }
@@ -143,6 +146,12 @@ public class BaseBoardBlockEntity extends BlockEntity implements MenuProvider {
         resetBoard(); if (aiEnabled && aiPlayerPieceType == 2) scheduleAiMove(); sync(); return true;
     }
 
+    /** 循环切换 AI 难度。对局进行中也允许调整，立即对下一步生效。 */
+    public boolean cycleAiDifficulty(UUID player) {
+        if (multiplayer || hostPlayer != null && !isHost(player)) return false;
+        aiDifficulty = aiDifficulty.next(); sync(); return true;
+    }
+
     public boolean toggleEditMode(UUID player) {
         if (multiplayer || !isHost(player) || gameOver) return false;
         editMode = !editMode; sync(); return true;
@@ -162,6 +171,7 @@ public class BaseBoardBlockEntity extends BlockEntity implements MenuProvider {
         board[y][x] = pieceType;
         for (Move captured : result.capturedPieces()) board[captured.y()][captured.x()] = 0;
         moveHistory.add(new Move(x, y, pieceType)); lastMoveX = x; lastMoveY = y; consecutivePasses = 0; koX = result.koX(); koY = result.koY();
+        BoardSounds.place(this, !result.capturedPieces().isEmpty());
         applyResult(result, !editMode);
         if (aiEnabled && !editMode && !gameOver && currentPlayer != aiPlayerPieceType) scheduleAiMove();
         sync(); return true;
@@ -181,19 +191,25 @@ public class BaseBoardBlockEntity extends BlockEntity implements MenuProvider {
     public boolean finishGoGame(UUID player) {
         if (gameMode != 1 || gameOver || editMode || !hasAnyPieces() || (multiplayer ? !isHost(player) : hostPlayer != null && !isHost(player))) return false;
         GomokuConfig.Score score = GomokuConfig.calculateScore(board, getConfig().getRows(), getConfig().getCols());
-        blackScore = score.blackScore(); whiteScore = score.whiteScore(); winner = blackScore > whiteScore ? 1 : whiteScore > blackScore ? 2 : 0; gameOver = true; editMode = false; sync(); return true;
+        blackScore = score.blackScore(); whiteScore = score.whiteScore(); winner = blackScore > whiteScore ? 1 : whiteScore > blackScore ? 2 : 0; gameOver = true; editMode = false;
+        BoardSounds.gameOver(this, !aiEnabled || winner == aiPlayerPieceType);
+        sync(); return true;
     }
 
     private void applyResult(ChessGameConfig.PlaceResult result, boolean switchTurn) {
-        if (result.gameOver()) { gameOver = true; editMode = false; winner = result.winner(); blackScore = result.blackScore(); whiteScore = result.whiteScore(); }
+        if (result.gameOver()) {
+            gameOver = true; editMode = false; winner = result.winner(); blackScore = result.blackScore(); whiteScore = result.whiteScore();
+            // 胜负音以人类玩家的视角判定：人机模式下 AI 获胜则播放失败音。
+            BoardSounds.gameOver(this, !aiEnabled || winner == aiPlayerPieceType);
+        }
         else if (result.switchPlayer() && switchTurn) currentPlayer = nextPlayer(currentPlayer);
     }
 
     private void scheduleAiMove() {
         if (aiThinking || !aiEnabled || gameOver || currentPlayer == aiPlayerPieceType || !(level instanceof ServerLevel server)) return;
-        aiThinking = true; int generation = ++aiGeneration; int player = currentPlayer; int[][] snapshot = copyBoard(); int savedKoX = koX; int savedKoY = koY; sync();
+        aiThinking = true; int generation = ++aiGeneration; int player = currentPlayer; int[][] snapshot = copyBoard(); int savedKoX = koX; int savedKoY = koY; AiDifficulty difficulty = aiDifficulty; sync();
         // 搜索在 AI 线程完成，只把结果切回主线程应用，避免阻塞服务器 tick。
-        AiScheduler.think(() -> { Move move = gameMode == 1 ? GoAi.chooseMove(snapshot, player, savedKoX, savedKoY) : GomokuAi.chooseMove(snapshot, player); server.getServer().execute(() -> finishAiMove(move, player, generation)); });
+        AiScheduler.think(() -> { Move move = gameMode == 1 ? GoAi.chooseMove(snapshot, player, savedKoX, savedKoY, difficulty) : GomokuAi.chooseMove(snapshot, player, difficulty); server.getServer().execute(() -> finishAiMove(move, player, generation)); });
     }
 
     private void finishAiMove(Move move, int player, int generation) {
@@ -204,7 +220,9 @@ public class BaseBoardBlockEntity extends BlockEntity implements MenuProvider {
         if (!result.success() || board[move.y()][move.x()] != 0) { sync(); return; }
         board[move.y()][move.x()] = player;
         for (Move captured : result.capturedPieces()) board[captured.y()][captured.x()] = 0;
-        moveHistory.add(new Move(move.x(), move.y(), player)); lastMoveX = move.x(); lastMoveY = move.y(); consecutivePasses = 0; koX = result.koX(); koY = result.koY(); applyResult(result, true); sync();
+        moveHistory.add(new Move(move.x(), move.y(), player)); lastMoveX = move.x(); lastMoveY = move.y(); consecutivePasses = 0; koX = result.koX(); koY = result.koY();
+        BoardSounds.place(this, !result.capturedPieces().isEmpty());
+        applyResult(result, true); sync();
     }
 
     private void finishAiPass(int player) {
@@ -225,10 +243,10 @@ public class BaseBoardBlockEntity extends BlockEntity implements MenuProvider {
     @Override public Component getDisplayName() { return Component.translatable(getConfig().getTranslationKey()); }
     @Override public AbstractContainerMenu createMenu(int id, Inventory inventory, Player player) { return new BaseBoardMenu(id, inventory, this); }
     @Override protected void saveAdditional(CompoundTag tag) {
-        super.saveAdditional(tag); tag.putInt("GameMode", gameMode); tag.putIntArray("Board", flatten()); tag.putInt("CurrentPlayer", currentPlayer); tag.putBoolean("GameOver", gameOver); tag.putBoolean("EditMode", editMode); tag.putInt("Winner", winner); tag.putDouble("BlackScore", blackScore); tag.putDouble("WhiteScore", whiteScore); tag.putInt("ConsecutivePasses", consecutivePasses); tag.putInt("KoX", koX); tag.putInt("KoY", koY); if (hostPlayer != null) tag.putUUID("HostPlayer", hostPlayer); if (guestPlayer != null) tag.putUUID("GuestPlayer", guestPlayer); tag.putBoolean("Multiplayer", multiplayer); tag.putInt("HostPieceType", hostPieceType); tag.putInt("GuestPieceType", guestPieceType); tag.putBoolean("AiEnabled", aiEnabled); tag.putInt("AiPlayerPieceType", aiPlayerPieceType); tag.putInt("LastMoveX", lastMoveX); tag.putInt("LastMoveY", lastMoveY); CompoundTag moves = new CompoundTag(); for (int i = 0; i < moveHistory.size(); i++) { Move move = moveHistory.get(i); moves.putIntArray(Integer.toString(i), new int[] { move.x(), move.y(), move.player() }); } tag.put("MoveHistory", moves); tag.putInt("MoveCount", moveHistory.size());
+        super.saveAdditional(tag); tag.putInt("GameMode", gameMode); tag.putIntArray("Board", flatten()); tag.putInt("CurrentPlayer", currentPlayer); tag.putBoolean("GameOver", gameOver); tag.putBoolean("EditMode", editMode); tag.putInt("Winner", winner); tag.putDouble("BlackScore", blackScore); tag.putDouble("WhiteScore", whiteScore); tag.putInt("ConsecutivePasses", consecutivePasses); tag.putInt("KoX", koX); tag.putInt("KoY", koY); if (hostPlayer != null) tag.putUUID("HostPlayer", hostPlayer); if (guestPlayer != null) tag.putUUID("GuestPlayer", guestPlayer); tag.putBoolean("Multiplayer", multiplayer); tag.putInt("HostPieceType", hostPieceType); tag.putInt("GuestPieceType", guestPieceType); tag.putBoolean("AiEnabled", aiEnabled); tag.putInt("AiPlayerPieceType", aiPlayerPieceType); tag.putInt("AiDifficulty", aiDifficulty.id()); tag.putInt("LastMoveX", lastMoveX); tag.putInt("LastMoveY", lastMoveY); CompoundTag moves = new CompoundTag(); for (int i = 0; i < moveHistory.size(); i++) { Move move = moveHistory.get(i); moves.putIntArray(Integer.toString(i), new int[] { move.x(), move.y(), move.player() }); } tag.put("MoveHistory", moves); tag.putInt("MoveCount", moveHistory.size());
     }
     @Override public void load(CompoundTag tag) {
-        super.load(tag); gameMode = tag.contains("GameMode") ? tag.getInt("GameMode") == 1 ? 1 : 0 : kind == BaseBoardBlock.GameKind.GO ? 1 : 0; board = new int[getConfig().getRows()][getConfig().getCols()]; int[] values = tag.getIntArray("Board"); for (int i = 0; i < values.length && i < board.length * board[0].length; i++) board[i / board[0].length][i % board[0].length] = values[i]; currentPlayer = tag.contains("CurrentPlayer") ? tag.getInt("CurrentPlayer") : getConfig().getInitialPlayer(); gameOver = tag.getBoolean("GameOver"); editMode = tag.getBoolean("EditMode"); winner = tag.contains("Winner") ? tag.getInt("Winner") : -1; blackScore = tag.getDouble("BlackScore"); whiteScore = tag.getDouble("WhiteScore"); consecutivePasses = tag.getInt("ConsecutivePasses"); koX = tag.contains("KoX") ? tag.getInt("KoX") : -1; koY = tag.contains("KoY") ? tag.getInt("KoY") : -1; hostPlayer = tag.hasUUID("HostPlayer") ? tag.getUUID("HostPlayer") : null; guestPlayer = tag.hasUUID("GuestPlayer") ? tag.getUUID("GuestPlayer") : null; multiplayer = tag.getBoolean("Multiplayer"); hostPieceType = tag.contains("HostPieceType") ? tag.getInt("HostPieceType") : 1; guestPieceType = tag.contains("GuestPieceType") ? tag.getInt("GuestPieceType") : 2; aiEnabled = tag.getBoolean("AiEnabled"); aiPlayerPieceType = tag.contains("AiPlayerPieceType") ? tag.getInt("AiPlayerPieceType") : 1; lastMoveX = tag.contains("LastMoveX") ? tag.getInt("LastMoveX") : -1; lastMoveY = tag.contains("LastMoveY") ? tag.getInt("LastMoveY") : -1; moveHistory.clear(); CompoundTag moves = tag.getCompound("MoveHistory"); for (int i = 0; i < tag.getInt("MoveCount"); i++) { int[] move = moves.getIntArray(Integer.toString(i)); if (move.length == 3) moveHistory.add(new Move(move[0], move[1], move[2])); }
+        super.load(tag); gameMode = tag.contains("GameMode") ? tag.getInt("GameMode") == 1 ? 1 : 0 : kind == BaseBoardBlock.GameKind.GO ? 1 : 0; board = new int[getConfig().getRows()][getConfig().getCols()]; int[] values = tag.getIntArray("Board"); for (int i = 0; i < values.length && i < board.length * board[0].length; i++) board[i / board[0].length][i % board[0].length] = values[i]; currentPlayer = tag.contains("CurrentPlayer") ? tag.getInt("CurrentPlayer") : getConfig().getInitialPlayer(); gameOver = tag.getBoolean("GameOver"); editMode = tag.getBoolean("EditMode"); winner = tag.contains("Winner") ? tag.getInt("Winner") : -1; blackScore = tag.getDouble("BlackScore"); whiteScore = tag.getDouble("WhiteScore"); consecutivePasses = tag.getInt("ConsecutivePasses"); koX = tag.contains("KoX") ? tag.getInt("KoX") : -1; koY = tag.contains("KoY") ? tag.getInt("KoY") : -1; hostPlayer = tag.hasUUID("HostPlayer") ? tag.getUUID("HostPlayer") : null; guestPlayer = tag.hasUUID("GuestPlayer") ? tag.getUUID("GuestPlayer") : null; multiplayer = tag.getBoolean("Multiplayer"); hostPieceType = tag.contains("HostPieceType") ? tag.getInt("HostPieceType") : 1; guestPieceType = tag.contains("GuestPieceType") ? tag.getInt("GuestPieceType") : 2; aiEnabled = tag.getBoolean("AiEnabled"); aiPlayerPieceType = tag.contains("AiPlayerPieceType") ? tag.getInt("AiPlayerPieceType") : 1; aiDifficulty = AiDifficulty.byId(tag.contains("AiDifficulty") ? tag.getInt("AiDifficulty") : AiDifficulty.NORMAL.id()); lastMoveX = tag.contains("LastMoveX") ? tag.getInt("LastMoveX") : -1; lastMoveY = tag.contains("LastMoveY") ? tag.getInt("LastMoveY") : -1; moveHistory.clear(); CompoundTag moves = tag.getCompound("MoveHistory"); for (int i = 0; i < tag.getInt("MoveCount"); i++) { int[] move = moves.getIntArray(Integer.toString(i)); if (move.length == 3) moveHistory.add(new Move(move[0], move[1], move[2])); }
     }
     @Override public CompoundTag getUpdateTag() { return saveWithoutMetadata(); }
     @Override public Packet<ClientGamePacketListener> getUpdatePacket() { return ClientboundBlockEntityDataPacket.create(this); }

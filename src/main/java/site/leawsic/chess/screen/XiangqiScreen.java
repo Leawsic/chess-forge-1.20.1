@@ -17,7 +17,7 @@ public class XiangqiScreen extends AbstractContainerScreen<XiangqiMenu> {
     private int boardLeft, boardTop;
     private float scale;
     private int selectedX = -1, selectedY = -1;
-    private Button resetButton, joinButton, leaveButton, hostRedButton, hostBlackButton, aiButton;
+    private Button resetButton, joinButton, leaveButton, hostRedButton, hostBlackButton, aiButton, difficultyButton;
     private boolean leaveSent;
     private long lastEscapePress;
     private Component notice;
@@ -58,6 +58,7 @@ public class XiangqiScreen extends AbstractContainerScreen<XiangqiMenu> {
         hostRedButton = button("gui.chess.xq.host_red", leftPos + imageWidth - 190, topPos + imageHeight - 24, 85, b -> setPieceTypes(1, -1));
         hostBlackButton = button("gui.chess.xq.host_black", leftPos + imageWidth - 100, topPos + imageHeight - 24, 85, b -> setPieceTypes(-1, 1));
         aiButton = button("gui.chess.xq.ai", leftPos + 10, topPos + imageHeight - 48, 80, b -> sendSimple(ChessNetwork.ToggleAiPacket::new));
+        difficultyButton = button("gui.chess.difficulty.normal", leftPos + 95, topPos + imageHeight - 48, 80, b -> sendSimple(ChessNetwork.CycleAiDifficultyPacket::new));
         updateButtons(board());
     }
 
@@ -204,6 +205,10 @@ public class XiangqiScreen extends AbstractContainerScreen<XiangqiMenu> {
         aiButton.active = aiButton.visible && host && !boardEntity.isGameOver();
         aiButton.setMessage(Component.translatable(!boardEntity.isAiEnabled() ? "gui.chess.xq.ai"
                 : boardEntity.getAiPlayerPieceType() == XiangqiConfig.RED ? "gui.chess.xq.ai_red" : "gui.chess.xq.ai_black"));
+        // 难度按钮只在人机模式下有意义。
+        difficultyButton.visible = boardEntity.isAiEnabled();
+        difficultyButton.active = difficultyButton.visible && host;
+        difficultyButton.setMessage(Component.translatable(boardEntity.getAiDifficulty().translationKey()));
     }
 
     @Override public boolean shouldCloseOnEsc() { return false; }

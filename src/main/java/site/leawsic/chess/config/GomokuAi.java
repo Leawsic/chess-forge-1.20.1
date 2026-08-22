@@ -29,7 +29,6 @@ public final class GomokuAi {
     private static final int ROOT_WIDTH = 16, NODE_WIDTH = 9, LIMIT_DEPTH = 10, VCF_DEPTH = 11;
     private static final int TT_MASK = (1 << 16) - 1;
     private static final int FLAG_ALPHA = 1, FLAG_BETA = 2, FLAG_PV = 3;
-    private static final long DEFAULT_BUDGET_NANOS = 1_000_000_000L;
     private static final int NEIGHBOR_RADIUS = 2;
 
     private static final int[] POW3 = new int[WINDOW];
@@ -106,6 +105,9 @@ public final class GomokuAi {
     private final int[][] board;
     private final int rows, cols, size;
     private final long budgetNanos;
+    private final int depthLimit;
+    private final float blunderChance;
+    private final boolean allowVcf;
     private final long[] ttKey = new long[TT_MASK + 1];
     private final int[] ttData = new int[TT_MASK + 1];
     private final int[] ttMove = new int[TT_MASK + 1];
@@ -116,33 +118,42 @@ public final class GomokuAi {
     private final int[][] scoreBuffer = new int[LIMIT_DEPTH + 2][ROOT_WIDTH];
     /** {@link #scan} 的输出缓冲，只在一次 scan 调用与紧随其后的取用之间有效。 */
     private final int[] scanPoints, scanScores;
+    /** 根节点每个着法的得分，供难度降级时挑选次优着法。 */
+    private final int[] rootPoints, rootScores;
+    private int rootCount;
     private int scanCount, scanMyFives, scanTheirFives, scanMyOpenFours, scanTheirOpenFours, scanTheirFours;
     private long zobrist, deadline;
     private int ply, rootMove = -1;
     private boolean aborted;
 
-    private GomokuAi(int[][] board, long budgetNanos) {
+    private GomokuAi(int[][] board, AiDifficulty difficulty) {
         this.board = board;
         this.rows = board.length;
         this.cols = board[0].length;
         this.size = rows * cols;
-        this.budgetNanos = budgetNanos;
+        this.budgetNanos = difficulty.budgetNanos();
+        this.depthLimit = Math.min(LIMIT_DEPTH, difficulty.maxDepth());
+        this.blunderChance = difficulty.blunderChance();
+        // 算杀过于凌厉，简单难度下关闭，否则新手几乎不可能赢。
+        this.allowVcf = difficulty != AiDifficulty.EASY;
         this.history = new int[size];
         this.neighbors = new int[size];
         this.scanPoints = new int[size];
         this.scanScores = new int[size];
+        this.rootPoints = new int[ROOT_WIDTH];
+        this.rootScores = new int[ROOT_WIDTH];
         for (int y = 0; y < rows; y++) for (int x = 0; x < cols; x++) if (board[y][x] != 0) markNeighbors(x, y, 1);
     }
 
     /** 为 {@code ai} 方（1 黑 2 白）选择落点，棋盘已满返回 {@code null}。 */
     public static Move chooseMove(int[][] board, int ai) {
-        return chooseMove(board, ai, DEFAULT_BUDGET_NANOS);
+        return chooseMove(board, ai, AiDifficulty.HARD);
     }
 
-    public static Move chooseMove(int[][] board, int ai, long budgetNanos) {
+    public static Move chooseMove(int[][] board, int ai, AiDifficulty difficulty) {
         int[][] working = new int[board.length][];
         for (int y = 0; y < board.length; y++) working[y] = board[y].clone();
-        GomokuAi engine = new GomokuAi(working, budgetNanos);
+        GomokuAi engine = new GomokuAi(working, difficulty);
         int point = engine.search(ai);
         int cols = board[0].length;
         if (point >= 0 && board[point / cols][point % cols] == 0) return new Move(point % cols, point / cols, ai);
@@ -161,6 +172,7 @@ public final class GomokuAi {
 
         scan(ai, opponent);
         // 自己能成五直接落子；对手能成五必须封堵；自己能成活四同样是必胜手。
+        // 这三项即使在简单难度下也不放弃，否则 AI 会显得完全不懂规则。
         int immediate = firstWithLevel(ai, L_FIVE);
         if (immediate >= 0) return immediate;
         immediate = firstWithLevel(opponent, L_FIVE);
@@ -168,11 +180,13 @@ public final class GomokuAi {
         immediate = firstWithLevel(ai, L_OPEN_FOUR);
         if (immediate >= 0) return immediate;
 
-        int forced = vcf(ai, VCF_DEPTH);
-        if (forced >= 0) return forced;
+        if (allowVcf) {
+            int forced = vcf(ai, VCF_DEPTH);
+            if (forced >= 0) return forced;
+        }
 
         int best = -1;
-        for (int depth = 2; depth <= LIMIT_DEPTH; depth++) {
+        for (int depth = 2; depth <= depthLimit; depth++) {
             rootMove = best;
             int score = searchRoot(ai, depth);
             if (aborted || rootMove < 0) break;
@@ -180,9 +194,33 @@ public final class GomokuAi {
             if (score >= WIN - LIMIT_DEPTH || score <= -WIN + LIMIT_DEPTH) break;
             if (System.nanoTime() > deadline) break;
         }
-        if (best >= 0) return best;
+        if (best >= 0) return applyBlunder(best);
         int count = generate(ai, 0, ROOT_WIDTH, -1);
         return count > 0 ? moveBuffer[0][0] : firstEmpty();
+    }
+
+    /**
+     * 低难度下按概率放弃最优落点，改选分值第 2 或第 3 的落点。
+     * 相比完全随机落子，这更像人类漏看了某个威胁。
+     */
+    private int applyBlunder(int best) {
+        if (blunderChance <= 0 || rootCount < 2) return best;
+        if (ThreadLocalRandom.current().nextFloat() >= blunderChance) return best;
+        int second = -1, secondScore = Integer.MIN_VALUE, third = -1, thirdScore = Integer.MIN_VALUE;
+        for (int i = 0; i < rootCount; i++) {
+            if (rootPoints[i] == best) continue;
+            if (rootScores[i] > secondScore) {
+                third = second; thirdScore = secondScore;
+                second = rootPoints[i]; secondScore = rootScores[i];
+            } else if (rootScores[i] > thirdScore) {
+                third = rootPoints[i]; thirdScore = rootScores[i];
+            }
+        }
+        if (second < 0) return best;
+        // 已知必败的落点不选，失误也该有底线。
+        if (secondScore <= -WIN + LIMIT_DEPTH) return best;
+        if (third >= 0 && thirdScore > -WIN + LIMIT_DEPTH && ThreadLocalRandom.current().nextBoolean()) return third;
+        return second;
     }
 
     private int searchRoot(int ai, int depth) {
@@ -191,6 +229,7 @@ public final class GomokuAi {
         if (count == 0) { rootMove = -1; return 0; }
         int bestScore = -WIN, bestMove = -1, tiedCount = 0;
         int[] tied = new int[count];
+        rootCount = 0;
         for (int i = 0; i < count; i++) {
             int point = pick(0, count, i);
             int score;
@@ -208,6 +247,7 @@ public final class GomokuAi {
                 remove(point, ai);
             }
             if (aborted) break;
+            if (rootCount < rootPoints.length) { rootPoints[rootCount] = point; rootScores[rootCount] = score; rootCount++; }
             if (score > bestScore) {
                 bestScore = score;
                 bestMove = point;
@@ -224,7 +264,7 @@ public final class GomokuAi {
 
     private int searchFull(int mover, int depth, int alpha, int beta) {
         if (checkTime()) return 0;
-        if (depth <= 0 || ply >= LIMIT_DEPTH) return evaluate(mover);
+        if (depth <= 0 || ply >= depthLimit || ply >= LIMIT_DEPTH) return evaluate(mover);
 
         int index = (int) (zobrist & TT_MASK);
         int hashMove = -1;
