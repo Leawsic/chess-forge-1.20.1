@@ -117,7 +117,8 @@ public class XiangqiBoardBlockEntity extends BlockEntity implements MenuProvider
     private void scheduleAiMove() {
         if (aiThinking || !aiEnabled || gameOver || currentPlayer == aiPlayerPieceType || !(level instanceof ServerLevel server)) return;
         aiThinking = true; int generation = ++aiGeneration; int side = currentPlayer; int[][] snapshot = copyBoard(); sync();
-        AiScheduler.think(() -> server.getServer().execute(() -> finishAiMove(XiangqiAi.chooseMove(snapshot, side), side, generation)));
+        // 搜索在 AI 线程完成，只把结果切回主线程应用，避免阻塞服务器 tick。
+        AiScheduler.think(() -> { XiangqiAi.Move move = XiangqiAi.chooseMove(snapshot, side); server.getServer().execute(() -> finishAiMove(move, side, generation)); });
     }
     private void finishAiMove(XiangqiAi.Move move, int side, int generation) {
         if (generation != aiGeneration || !aiEnabled || gameOver || currentPlayer != side) return;

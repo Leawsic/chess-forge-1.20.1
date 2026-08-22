@@ -192,7 +192,8 @@ public class BaseBoardBlockEntity extends BlockEntity implements MenuProvider {
     private void scheduleAiMove() {
         if (aiThinking || !aiEnabled || gameOver || currentPlayer == aiPlayerPieceType || !(level instanceof ServerLevel server)) return;
         aiThinking = true; int generation = ++aiGeneration; int player = currentPlayer; int[][] snapshot = copyBoard(); int savedKoX = koX; int savedKoY = koY; sync();
-        AiScheduler.think(() -> server.getServer().execute(() -> finishAiMove(gameMode == 1 ? GoAi.chooseMove(snapshot, player, savedKoX, savedKoY) : GomokuAi.chooseMove(snapshot, player), player, generation)));
+        // 搜索在 AI 线程完成，只把结果切回主线程应用，避免阻塞服务器 tick。
+        AiScheduler.think(() -> { Move move = gameMode == 1 ? GoAi.chooseMove(snapshot, player, savedKoX, savedKoY) : GomokuAi.chooseMove(snapshot, player); server.getServer().execute(() -> finishAiMove(move, player, generation)); });
     }
 
     private void finishAiMove(Move move, int player, int generation) {

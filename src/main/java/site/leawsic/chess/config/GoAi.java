@@ -9,11 +9,20 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
+/**
+ * 围棋 AI（一步前瞻的启发式落子）。
+ *
+ * <p>围棋没有可靠的手写局面评估函数，深搜收益很低，因此这里不做树搜索，
+ * 而是把提子、救子、打吃、眼位、边线等要素编成权重打分，在近似最优的点位中随机选择。
+ */
 public final class GoAi {
     private static final int[][] DIRECTIONS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-    private static final int TOLERANCE = 1_500;
+    private static final int[][] DIAGONALS = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
+    private static final int TOLERANCE = 900;
+
     private GoAi() {}
 
+    /** 为 {@code p} 方选点，{@code koX}/{@code koY} 为禁着点（劫），无处可下返回 {@code null}（弃一手）。 */
     public static Move chooseMove(int[][] b, int p, int koX, int koY) {
         int op = other(p);
         List<ScoredMove> moves = new ArrayList<>();
@@ -32,17 +41,59 @@ public final class GoAi {
     }
 
     private static int score(int[][] b, int x, int y, int p, int op, Position pos) {
-        int score = pos.captured * 4_000 + pos.liberties * 45;
+        int score = pos.captured * 3_000 + pos.liberties * 40;
+        // 落下后只剩一气且没吃到子，等于送死。
         if (pos.captured == 0 && pos.liberties == 1) score -= 9_000;
-        int atari = 0;
+        // 填自己的真眼是纯粹的损失，且可能把活棋做死。
+        if (isOwnEye(b, x, y, p)) score -= 12_000;
+
+        int atari = 0, rescue = 0;
         for (int[] d : DIRECTIONS) {
             int nx = x + d[0], ny = y + d[1];
-            if (inBounds(b, nx, ny) && b[ny][nx] == op && liberties(b, group(b, nx, ny, op)) == 1) atari++;
+            if (!inBounds(b, nx, ny)) continue;
+            int neighbour = b[ny][nx];
+            if (neighbour == op) {
+                // 把对方一块棋逼到一气就是打吃。
+                if (liberties(b, group(b, nx, ny, op)) == 1) atari += 2_400;
+            } else if (neighbour == p) {
+                Set<Long> own = group(b, nx, ny, p);
+                // 自己已被打吃的块，接上去能长气就值得救。
+                if (liberties(b, own) == 1 && pos.liberties > 1) rescue += own.size() * 1_800 + 1_200;
+            }
         }
-        score += atari * 2_600;
-        score += adjacent(b, x, y, p) * 150 + adjacent(b, x, y, op) * 70;
-        score -= Math.abs(x - b[0].length / 2) + Math.abs(y - b.length / 2);
+        score += atari + rescue;
+        score += adjacent(b, x, y, p) * 120 + adjacent(b, x, y, op) * 80;
+
+        int rows = b.length, cols = b[0].length;
+        int edge = Math.min(Math.min(x, cols - 1 - x), Math.min(y, rows - 1 - y));
+        // 第一线效率低，第三、四线是布局要点。
+        if (edge == 0) score -= 900;
+        else if (edge == 1) score -= 250;
+        else if (edge == 2 || edge == 3) score += 260;
+        score -= Math.abs(x - cols / 2) + Math.abs(y - rows / 2);
         return score;
+    }
+
+    /**
+     * 判断该空点是否为 {@code p} 的真眼：四邻全是自己的子，
+     * 且斜角上对方的子不足以破眼（边角允许一个，中腹允许一个）。
+     */
+    private static boolean isOwnEye(int[][] b, int x, int y, int p) {
+        int op = other(p);
+        for (int[] d : DIRECTIONS) {
+            int nx = x + d[0], ny = y + d[1];
+            if (!inBounds(b, nx, ny)) continue;
+            if (b[ny][nx] != p) return false;
+        }
+        int hostile = 0, diagonals = 0;
+        for (int[] d : DIAGONALS) {
+            int nx = x + d[0], ny = y + d[1];
+            if (!inBounds(b, nx, ny)) continue;
+            diagonals++;
+            if (b[ny][nx] == op) hostile++;
+        }
+        // 边上或角上的眼只要有一个斜角被占就不再成眼。
+        return diagonals < 4 ? hostile == 0 : hostile <= 1;
     }
 
     private static Position play(int[][] b, int x, int y, int p) {
