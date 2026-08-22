@@ -108,6 +108,8 @@ public final class GomokuAi {
     private final int depthLimit;
     private final float blunderChance;
     private final boolean allowVcf;
+    /** 进攻系数，按 256 定点化，避免在热点循环里做浮点运算。 */
+    private final int attackBias;
     private final long[] ttKey = new long[TT_MASK + 1];
     private final int[] ttData = new int[TT_MASK + 1];
     private final int[] ttMove = new int[TT_MASK + 1];
@@ -122,8 +124,14 @@ public final class GomokuAi {
     private final int[] rootPoints, rootScores;
     private int rootCount;
     private int scanCount, scanMyFives, scanTheirFives, scanMyOpenFours, scanTheirOpenFours, scanTheirFours;
+    /** 我方可形成的冲四与活三数量，用于判断是否有主动进攻的余地。 */
+    private int scanMyFours, scanMyOpenThrees;
+    /** 对手可形成的活三数量，用于判断当前是否安全到可以抢攻。 */
+    private int scanTheirOpenThrees;
     private long zobrist, deadline;
     private int ply, rootMove = -1;
+    /** 引擎控制的一方，进攻系数只偏向这一方。 */
+    private int engineSide;
     private boolean aborted;
 
     private GomokuAi(int[][] board, AiDifficulty difficulty) {
@@ -134,6 +142,7 @@ public final class GomokuAi {
         this.budgetNanos = difficulty.budgetNanos();
         this.depthLimit = Math.min(LIMIT_DEPTH, difficulty.maxDepth());
         this.blunderChance = difficulty.blunderChance();
+        this.attackBias = Math.round(difficulty.attackBias() * 256F);
         // 算杀过于凌厉，简单难度下关闭，否则新手几乎不可能赢。
         this.allowVcf = difficulty != AiDifficulty.EASY;
         this.history = new int[size];
@@ -164,6 +173,7 @@ public final class GomokuAi {
     private int search(int ai) {
         deadline = System.nanoTime() + budgetNanos;
         zobrist = computeZobrist(ai);
+        engineSide = ai;
         int opponent = other(ai);
 
         boolean empty = true;
@@ -185,6 +195,10 @@ public final class GomokuAi {
             if (forced >= 0) return forced;
         }
 
+        // 局面安全时优先抢建双三 / 四三这类硬威胁，而不是继续摆阵形。
+        int initiative = seizeInitiative(ai, opponent);
+        if (initiative >= 0) return initiative;
+
         int best = -1;
         for (int depth = 2; depth <= depthLimit; depth++) {
             rootMove = best;
@@ -197,6 +211,39 @@ public final class GomokuAi {
         if (best >= 0) return applyBlunder(best);
         int count = generate(ai, 0, ROOT_WIDTH, -1);
         return count > 0 ? moveBuffer[0][0] : firstEmpty();
+    }
+
+    /**
+     * 抢占先手：对手没有四、也没有活三时，若我方能一手做出双三或四三，直接落子。
+     *
+     * <p>这解决的是「对手乱下、AI 却继续按套路布局」的问题。搜索本身会因为
+     * 候选排序里对手的防守分权重偏高而倾向于跟着对手走，
+     * 但在对手毫无威胁的局面里，抢建自己的双威胁明显更优。
+     *
+     * <p>只在真正安全时执行，因此不会因为贪攻而漏防；
+     * 简单难度不启用，保留给新手可乘之机。
+     */
+    private int seizeInitiative(int me, int opponent) {
+        if (attackBias < 256 || blunderChance >= 0.4F) return -1;
+        // vcf 内部会重新 scan 并交换视角，这里必须重新扫描才能拿到我方视角的统计。
+        scan(me, opponent);
+        // 对手存在四或活三时，防守优先级高于抢攻，交给搜索处理。
+        if (scanTheirFives > 0 || scanTheirOpenFours > 0 || scanTheirFours > 0 || scanTheirOpenThrees > 0) return -1;
+        if (scanMyFours == 0 && scanMyOpenThrees == 0) return -1;
+
+        int bestPoint = -1, bestScore = 0;
+        for (int point = 0; point < size; point++) {
+            if (neighbors[point] == 0 || board[point / cols][point % cols] != 0) continue;
+            int x = point % cols, y = point / cols;
+            int packed = analyse(x, y, me);
+            int score = packed >>> 4;
+            // 双三及以上才算硬威胁；单个活三对手一手就能挡掉，不值得当作必然选择。
+            if (score < SCORE_DOUBLE_THREE) continue;
+            // 抢攻点自身不能反过来送给对手更大的威胁。
+            if ((analyse(x, y, opponent) >>> 4) >= SCORE_OPEN_FOUR) continue;
+            if (score > bestScore) { bestScore = score; bestPoint = point; }
+        }
+        return bestPoint;
     }
 
     /**
@@ -362,10 +409,17 @@ public final class GomokuAi {
     /**
      * 单趟扫描所有「空且邻近有子」的点，记录双方最高棋型等级与组合分值，
      * 并统计各类威胁数量。生成、评估、算杀共用这一趟扫描的结果。
+     *
+     * <p>候选分值用进攻系数加权自己的威胁：{@code 我方分 * bias + 对手分}。
+     * 系数越大越倾向于抢先造威胁而不是贴着对手的棋防守。
+     * 加权只在 {@code mover} 是引擎控制方时生效，模拟对手时按对等权重，
+     * 否则搜索会误以为对手同样偏爱进攻。
      */
     private void scan(int mover, int opponent) {
+        int bias = mover == engineSide ? attackBias : 256;
         scanCount = 0;
         scanMyFives = scanTheirFives = scanMyOpenFours = scanTheirOpenFours = scanTheirFours = 0;
+        scanMyFours = scanMyOpenThrees = scanTheirOpenThrees = 0;
         for (int point = 0; point < size; point++) {
             if (neighbors[point] == 0) continue;
             int x = point % cols, y = point / cols;
@@ -375,11 +429,14 @@ public final class GomokuAi {
             int theirLevel = theirs & 0xf, theirScore = theirs >>> 4;
             if (myLevel == L_FIVE) scanMyFives++;
             else if (myLevel == L_OPEN_FOUR) scanMyOpenFours++;
+            else if (myLevel == L_FOUR) scanMyFours++;
+            else if (myLevel == L_OPEN_THREE) scanMyOpenThrees++;
             if (theirLevel == L_FIVE) scanTheirFives++;
             else if (theirLevel == L_OPEN_FOUR) scanTheirOpenFours++;
             else if (theirLevel == L_FOUR) scanTheirFours++;
+            else if (theirLevel == L_OPEN_THREE) scanTheirOpenThrees++;
             scanPoints[scanCount] = point | (myLevel << 16) | (theirLevel << 20);
-            scanScores[scanCount] = myScore * 3 / 2 + theirScore;
+            scanScores[scanCount] = (int) (((long) myScore * bias) >> 8) + theirScore;
             scanCount++;
         }
     }
@@ -449,8 +506,12 @@ public final class GomokuAi {
     // --------------------------------------------------------------- 局面评估
 
     /**
-     * 以已落子的棋型分之差衡量局面，行棋方因握有先手而加权。
+     * 以已落子的棋型分之差衡量局面，我方一侧按进攻系数加权。
      * 只在每条连子的起点计分，避免同一条线被重复累加。
+     *
+     * <p>注意 {@code mover} 是当前节点的行棋方，随搜索层数交替，
+     * 而进攻系数只应偏向引擎控制的一方。因此这里以 {@code engineSide} 为基准，
+     * 否则加权会在奇偶层之间来回翻转，评估失去一致性。
      */
     private int evaluate(int mover) {
         int mine = 0, theirs = 0;
@@ -463,9 +524,11 @@ public final class GomokuAi {
                 if (inBounds(px, py) && board[py][px] == player) continue;
                 total += LEVEL_SCORE[lineLevel(x, y, player, d[0], d[1])];
             }
-            if (player == mover) mine += total; else theirs += total;
+            if (player == engineSide) mine += total; else theirs += total;
         }
-        return mine * 3 / 2 - theirs;
+        int score = (int) (((long) mine * attackBias) >> 8) - theirs;
+        // negamax 要求返回值站在当前行棋方的立场上。
+        return mover == engineSide ? score : -score;
     }
 
     /** 该点对 {@code player} 的最高单方向等级。 */

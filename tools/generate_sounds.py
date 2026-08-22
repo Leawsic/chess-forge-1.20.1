@@ -44,22 +44,32 @@ def modes(duration: float, freqs, gains, decays) -> np.ndarray:
     return out
 
 
-def noise_burst(duration: float, decay: float, lowpass: int = 0) -> np.ndarray:
-    """短噪声爆发，用来做出敲击瞬间的「哒」声。"""
+def noise_burst(duration: float, decay: float, lowpass: int = 0, poles: int = 1) -> np.ndarray:
+    """短噪声爆发，用来做出敲击瞬间的接触声。
+
+    ``poles`` 为低通级数，级数越高高频衰减越陡。落子这类闷响需要把高频压得很干净，
+    单级一阶低通（-6 dB/oct）不够，实测要 3~4 级才不会残留「叮」的金属感。
+    """
     n = int(RATE * duration)
     t = np.arange(n) / RATE
     rng = np.random.default_rng(0xC4E55)
     burst = rng.standard_normal(n) * np.exp(-t / decay)
-    if lowpass > 0:
-        # 一阶 IIR 低通，避免噪声过于刺耳。
-        alpha = 1.0 - np.exp(-2 * np.pi * lowpass / RATE)
-        filtered = np.zeros(n)
+    return lowpass_filter(burst, lowpass, poles) if lowpass > 0 else burst
+
+
+def lowpass_filter(signal: np.ndarray, cutoff: int, poles: int = 1) -> np.ndarray:
+    """串联多级一阶 IIR 低通。"""
+    alpha = 1.0 - np.exp(-2 * np.pi * cutoff / RATE)
+    out = signal
+    for _ in range(max(1, poles)):
+        filtered = np.empty_like(out)
         acc = 0.0
-        for i in range(n):
-            acc += alpha * (burst[i] - acc)
+        for i in range(len(out)):
+            acc += alpha * (out[i] - acc)
             filtered[i] = acc
-        return filtered
-    return burst
+        out = filtered
+    return out
+
 
 
 def tone(duration: float, start: float, end: float, gain: float = 1.0, decay: float = 0.35) -> np.ndarray:
@@ -83,24 +93,45 @@ def normalize(signal: np.ndarray, peak: float = 0.82) -> np.ndarray:
 
 
 def piece_place() -> np.ndarray:
-    """落子：木质棋子磕在棋盘上的清脆短音。"""
-    body = modes(0.16, [1_850, 2_640, 3_910, 5_200], [1.0, 0.55, 0.3, 0.16], [0.028, 0.02, 0.013, 0.008])
-    click = noise_burst(0.16, 0.0035, lowpass=6_500) * 0.85
-    signal = body + click
-    return normalize(signal * envelope(len(signal), 0.0006, 0.05))
+    """落子：棋子按在厚木棋盘上的低沉闷响。
+
+    重点是让能量集中在 90~470 Hz。此前版本的模态在 1.8~5.2 kHz，
+    那个频段正是瓷器和金属的共振区，所以听起来像筷子敲碗。
+    厚实的木头体积大、阻尼强，基频低且高频衰减极快。
+    """
+    duration = 0.26
+    # 低频主体：木盘被压实时的整体振动。
+    body = modes(
+        duration,
+        [96, 158, 227, 333, 452],
+        [1.0, 0.86, 0.42, 0.2, 0.09],
+        [0.085, 0.07, 0.045, 0.026, 0.015],
+    )
+    # 接触瞬间的摩擦声，截止压到 700 Hz 才不会带出叮声。
+    contact = noise_burst(duration, 0.0045, lowpass=700, poles=3) * 1.6
+    signal = body + contact
+    # 整体再低通一次，确保没有任何高频残留。
+    signal = lowpass_filter(signal, 1_500, poles=2)
+    return normalize(signal * envelope(len(signal), 0.0015, 0.11))
 
 
 def piece_capture() -> np.ndarray:
-    """吃子：落子声之后紧跟一记被提子的低沉碰撞。"""
-    first = piece_place() * 0.9
-    second_body = modes(0.22, [820, 1_180, 1_720, 2_450], [1.0, 0.6, 0.34, 0.18], [0.05, 0.036, 0.024, 0.014])
-    second_click = noise_burst(0.22, 0.006, lowpass=3_200) * 0.7
-    second = normalize(second_body + second_click) * 0.95
-    gap = int(RATE * 0.055)
+    """吃子：落子闷响之后紧跟一记提子的更低碰撞。"""
+    first = piece_place() * 0.85
+    second_body = modes(
+        0.34,
+        [72, 118, 176, 254],
+        [1.0, 0.72, 0.34, 0.15],
+        [0.12, 0.09, 0.055, 0.03],
+    )
+    second_contact = noise_burst(0.34, 0.007, lowpass=520, poles=3) * 1.3
+    second = normalize(lowpass_filter(second_body + second_contact, 1_100, poles=2))
+    gap = int(RATE * 0.075)
     signal = np.zeros(gap + len(second))
     signal[: len(first)] += first
     signal[gap : gap + len(second)] += second
     return normalize(signal)
+
 
 
 def game_win() -> np.ndarray:
